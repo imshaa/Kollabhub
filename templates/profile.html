@@ -1,0 +1,470 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>KollabHub – Your Workspaces</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link
+    href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="{% static 'css/profile.css' %}" />
+  <link rel="stylesheet" href="{% static 'css/main.css' %}" />
+</head>
+
+<body>
+
+  <!-- ── NAVBAR ── -->
+  <nav class="navbar">
+    <span class="logo">KollabHub</span>
+    <div class="avatar">
+      {% if user.profile_picture %}
+      <img src="{{ user.profile_picture.url }}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">
+      {% else %}
+      {{ user.username|first|upper }}
+      {% endif %}
+    </div>
+  </nav>
+
+  <!-- messages (errors use same style as login/signup) -->
+  {% if messages %}
+    {% for msg in messages %}
+      {% if 'error' in msg.tags %}
+        <div class="error-wrapper">
+          <div class="error-message">
+            <span class="error-icon">⚠</span>
+            <span class="error-text">{{ msg }}</span>
+          </div>
+        </div>
+      {% else %}
+        <!-- other message types could be styled differently later -->
+        <div class="error-wrapper">
+          <div class="error-message">
+            <span class="error-icon">ℹ</span>
+            <span class="error-text">{{ msg }}</span>
+          </div>
+        </div>
+      {% endif %}
+    {% endfor %}
+  {% endif %}
+
+  <!-- ── WORKSPACES PAGE ── -->
+  <main class="page">
+    <div class="page-header">
+      <div>
+        <h1>Your Workspaces</h1>
+        <p class="subtitle">Select a workspace to jump back in</p>
+      </div>
+      <div class="header-actions">
+        <button class="btn-outline" id="openJoinBtn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M15 3h6v6M14 10l6.1-6.1M9 21H3v-6M10 14l-6.1 6.1" />
+          </svg>
+          Join Workspace
+        </button>
+        <button class="btn-primary" id="openCreateBtn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="12" y1="5" x2="12" y2="19" />
+            <line x1="5" y1="12" x2="19" y2="12" />
+          </svg>
+          Create Workspace
+        </button>
+      </div>
+    </div>
+
+    <div class="workspace-grid" id="workspaceGrid">
+      {% if workspaces %}
+      {% for ws in workspaces %}
+      <a href="{% url 'chatui' ws.id %}" class="ws-card-link">
+        <div class="ws-card">
+          <div class="card-top">
+            <div class="ws-icon">
+              {% if ws.image %}
+              <img src="{{ ws.image.url }}" alt="{{ ws.title }} image" class="ws-img">
+              {% else %}
+              {{ ws.title|first|upper }}
+              {% endif %}
+            </div>
+
+            <div class="badge-group">
+              {% if ws.visibility == "private" %}
+              <span class="workspace-badge">Private</span>
+              {% else %}
+              <span class="workspace-badge">Public</span>
+              {% endif %}
+
+              {% if ws.admin == request.user %}
+              <span class="role-badge">Admin</span>
+              {% else %}
+              <span class="role-badge">Member</span>
+              {% endif %}
+            </div>
+          </div>
+
+          <div class="ws-name">{{ ws.title }}</div>
+          <div class="ws-desc">
+            {{ ws.description|default:"No description provided." }}
+          </div>
+        </div>
+      </a>
+      {% endfor %}
+      {% else %}
+      <!-- new user: show a create-new workspace card in the grid instead of plain text message -->
+      <div class="ws-card create-card" id="createGridCard">
+        <div class="create-icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="12" y1="5" x2="12" y2="19"/>
+            <line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+        </div>
+        <span class="workspace-create-title">Create New Workspace</span>
+      </div>
+      {% endif %}
+    </div>
+  </main>
+  <div class="overlay" id="profileOverlay">
+    <div class="modal modal--narrow" role="dialog" aria-modal="true">
+      <form method="POST" action="{% url 'update_profile' %}" enctype="multipart/form-data">
+        {% csrf_token %}
+
+        <div class="join-header">
+          <div>
+            <h2>Edit Profile</h2>
+            <p class="modal-subtitle">Update your personal details</p>
+          </div>
+          <button type="button" class="icon-close" id="profileCloseBtn">
+            ✕
+          </button>
+        </div>
+
+        <div class="form-card">
+
+          
+
+          <!-- Avatar -->
+          <div class="profile-av-wrap">
+            {% if user.profile_picture %}
+            <img src="{{ user.profile_picture.url }}" class="profile-av" />
+            {% else %}
+            <div class="profile-av">
+              {{ user.username|first|upper }}
+            </div>
+            {% endif %}
+            <div>
+              <input type="file" name="fileUpload" accept="image/*">
+            </div>
+          </div>
+
+          <!-- Username -->
+          <div class="form-group" style="margin-top:16px;">
+            <label for="profileUsername">Username</label>
+            <div class="input-wrapper">
+              <input type="text"
+                       id="profileUsername"
+                       name="username"
+                       value="{{ user.username }}"
+                       required>
+            </div>
+          </div>
+
+          <!-- Display Name -->
+          <div class="form-group" style="margin-top:16px;">
+            <label for="profileName">Display Name</label>
+            <div class="input-wrapper">
+              <input type="text"
+                       id="profileName"
+                       name="displayName"
+                       value="{{ user.display_name }}"
+                       required>
+            </div>
+          </div>
+
+          <!-- Email (readonly) -->
+          <div class="form-group" style="margin-top:16px;">
+            <label>Email</label>
+            <div class="input-wrapper">
+              <input type="email" value="{{ user.email }}" readonly>
+            </div>
+          </div>
+
+          <!-- Bio -->
+          <div class="form-group" style="margin-top:16px;">
+            <label>Bio</label>
+            <textarea name="bio" maxlength="225" rows="3">{{ user.bio }}</textarea>
+          </div>
+
+          <!-- Status -->
+          <div class="form-group" style="margin-top:16px;">
+            <label>Status</label>
+            <div class="status-opts">
+              <button type="button" class="status-opt {% if user.status == 'online' %}active{% endif %}"
+                data-status="online">Online</button>
+              <button type="button" class="status-opt {% if user.status == 'away' %}active{% endif %}"
+                data-status="away">Away</button>
+              <button type="button" class="status-opt {% if user.status == 'busy' %}active{% endif %}"
+                data-status="busy">Busy</button>
+              <button type="button" class="status-opt {% if user.status == 'offline' %}active{% endif %}"
+                data-status="offline">Offline</button>
+            </div>
+            <input type="hidden" name="status" id="statusInput" value="{{ user.status }}">
+          </div>
+
+          <div class="modal-actions">
+            <button type="button" class="btn-cancel" id="profileCancelBtn">Cancel</button>
+            <button type="submit" class="btn-primary">Save Profile</button>
+          </div>
+
+          <!-- Divider -->
+<div class="profile-divider"></div>
+
+<!-- Sign Out -->
+<div class="signout-wrap">
+  <a href="{% url 'logout' %}" class="btn-signout">
+    Sign Out
+  </a>
+</div>
+
+        </div>
+      </form>
+    </div>
+  </div>
+  <!-- ══════════════════════════════════════════
+       CREATE WORKSPACE MODAL
+  ══════════════════════════════════════════ -->
+  <div class="overlay" id="createOverlay">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="createTitle">
+      <button class="back-btn" id="createBackBtn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <polyline points="15 18 9 12 15 6" />
+        </svg>
+        Back to Workspaces
+      </button>
+
+      <h2 id="createTitle">Create a New Workspace</h2>
+      <p class="modal-subtitle">Set up a new collaborative environment for your team.</p>
+
+      <form method="POST" action="{% url 'workspace' %}" enctype="multipart/form-data" class="form-card">
+        {% csrf_token %}
+        <div class="form-group">
+          <label for="workspaceImage">Workspace Image</label>
+          <input type="file" id="workspaceImage" name="fileUpload" accept="image/*" required />
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="createName">Workspace Name</label>
+            <div class="input-wrapper">
+              <svg class="input-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2">
+                <rect x="3" y="3" width="18" height="18" rx="2" />
+              </svg>
+              <input type="text" id="createName" name="title" placeholder="e.g. Acme Corp Design" required />
+            </div>
+            <span class="field-error" id="createNameErr"></span>
+          </div>
+          <!-- displayName/email fields are kept purely visual; no name attributes -->
+          <div class="form-group">
+            <label for="createDisplay">Display Name</label>
+            <div class="input-wrapper">
+              <svg class="input-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2">
+                <polyline points="4 7 4 4 20 4 20 7" />
+                <line x1="9" y1="20" x2="15" y2="20" />
+                <line x1="12" y1="4" x2="12" y2="20" />
+              </svg>
+              <input type="text" id="createDisplay" name="display_name" placeholder="e.g. Design Team" />
+            </div>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="createEmail">Team Email <span class="optional">(Optional)</span></label>
+          <div class="input-wrapper">
+            <svg class="input-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2">
+              <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
+              <polyline points="22,6 12,13 2,6" />
+            </svg>
+            <input type="email" id="createEmail" name="team_email" placeholder="design@acme.com" />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="createDesc">Description</label>
+          <div class="textarea-wrapper">
+            <svg class="input-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+              <polyline points="14 2 14 8 20 8" />
+            </svg>
+            <textarea id="createDesc" name="description" placeholder="What's this workspace for?" rows="4"></textarea>
+          </div>
+        </div>
+
+        <!-- permissions section left as-is visual only -->
+        <div class="form-group">
+          <label>Permissions</label>
+          <p class="field-hint">Control who can join this workspace</p>
+
+          <!-- Hidden input that actually stores visibility -->
+          <input type="hidden" name="visibility" id="visibilityInput" value="public">
+          <!-- PUBLIC -->
+          <div class="permission-grid">
+            <div class="perm-card active" data-visibility="public">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="11" width="18" height="11" rx="2" />
+                <path d="M7 11V7a5 5 0 0 1 9.9-1" />
+              </svg>
+              <strong>Open</strong>
+              <span>Anyone with the link can join</span>
+            </div>
+            <!-- PRIVATE -->
+            <div class="perm-card" data-visibility="private">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="11" width="18" height="11" rx="2" />
+                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+              </svg>
+              <strong>Invite Only</strong>
+              <span>Members must be invited by admin</span>
+            </div>
+            <div class="perm-card disabled" data-perm="enterprise">
+              <span class="soon-badge">SOON</span>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="2" y="7" width="20" height="14" rx="2" />
+                <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
+              </svg>
+              <strong>Enterprise</strong>
+              <span>SSO required</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" class="btn-cancel" id="createCancelBtn">Cancel</button>
+          <button type="submit" class="btn-primary">Create Workspace</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════
+       JOIN WORKSPACE MODAL
+       Converted from TSX — mirrors all 3 states:
+       idle/loading/error → success
+  ══════════════════════════════════════════ -->
+  <div class="overlay" id="joinOverlay">
+    <div class="modal modal--narrow" role="dialog" aria-modal="true" aria-labelledby="joinTitle">
+
+      <button class="icon-close" id="joinCloseBtn" aria-label="Close modal">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <line x1="18" y1="6" x2="6" y2="18" />
+          <line x1="6" y1="6" x2="18" y2="18" />
+        </svg>
+      </button>
+
+      <h2 id="joinTitle">Join a Workspace</h2>
+      <p class="modal-subtitle">Enter your details to request access</p>
+
+      <form method="POST" action="{% url 'join_workspace_manual' %}" class="form-card">
+        {% csrf_token %}
+        <div class="form-group">
+          <label for="workspaceEmail">Workspace Email</label>
+          <div class="input-wrapper">
+            <svg class="input-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2">
+              <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
+              <polyline points="22,6 12,13 2,6" />
+            </svg>
+            <input type="email" id="workspaceEmail" name="workspace_email" placeholder="you@company.com" required
+              autocomplete="email" />
+          </div>
+          <p class="field-hint" style="margin-top:4px; font-size:0.85rem; color:#a3a3a3;">Enter admin or team address
+            for the workspace</p>
+        </div>
+
+        <div class="form-group" style="margin-top:16px;">
+          <label for="wsTitle">Workspace Title</label>
+          <div class="input-wrapper">
+            <svg class="input-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2">
+              <rect x="2" y="7" width="20" height="14" rx="2" />
+              <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
+            </svg>
+            <input type="text" id="wsTitle" name="title" placeholder="e.g. Product Design" required />
+          </div>
+        </div>
+
+        <div class="modal-actions" style="margin-top:20px;">
+          <button type="button" class="btn-cancel btn--flex1" id="joinCancelBtn">Cancel</button>
+          <button type="submit" class="btn-primary btn--flex1">Request to Join</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="{% static 'js/profile.js' %}"></script>
+</body>
+
+</html>
+
+
+
+
+
+
+<!-- {% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>User Profile</title>
+  <link rel="stylesheet" href="{% static 'css/profile.css' %}">
+</head>
+<body>
+  Django Messages -->
+<!-- {% if messages %}
+    <div class="messages">
+      {% for message in messages %}
+      <div class="message {{ message.tags }}">{{ message }}</div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+
+
+ Only keep JS for modal + preview -->
+<!-- <script>
+    const fileInput = document.getElementById("fileUpload");
+    const profileImage = document.getElementById("profileImage");
+
+    fileInput.addEventListener("change", function (event) {
+      const file = event.target.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = function (e) {
+          profileImage.src = e.target.result;
+        }
+        reader.readAsDataURL(file);
+      }
+    }); -->
+<!-- 
+    // Modal logic
+//     document.getElementById("openInviteBtn").addEventListener("click", function () {
+//   document.getElementById("inviteModal").classList.add("active");
+// });
+
+// document.getElementById("closeInviteModal").addEventListener("click", function () {
+//   document.getElementById("inviteModal").classList.remove("active");
+// });
+
+// document.getElementById("inviteModal").addEventListener("click", function (e) {
+//   if (e.target === this) {
+//     this.classList.remove("active");
+//   }
+// });
+
+   
+//   </script>
+// </body>  -->
