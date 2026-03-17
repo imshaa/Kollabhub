@@ -1,0 +1,338 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Task Board – KollabHub</title>
+  <!-- newwork -->
+    <link rel="stylesheet" href="{% static 'css/taskboard.css' %}">
+</head>
+<body>
+
+<!-- ══════════ BOARD HEADER ══════════ -->
+<header class="board-header">
+  <div class="board-header-left">
+    <a href="workspace.html" class="back-link">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+    </a>
+    <div class="board-title-wrap">
+      <h1 class="board-title">Task Board</h1>
+      <span class="board-subtitle">Product Design · Sprint 4</span>
+    </div>
+  </div>
+  <div class="board-header-right">
+    <!-- Search + Filter -->
+    <div class="filter-bar">
+      <div class="search-wrap">
+        <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="text" id="searchInput" class="search-input" placeholder="Search tasks…"/>
+      </div>
+
+      <!-- Filter icon button + dropdown -->
+      <div class="filter-dropdown-wrap" id="filterDropdownWrap">
+        <button class="filter-icon-btn" id="filterIconBtn" title="Filter tasks">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
+          </svg>
+          <span class="filter-btn-label">Filter</span>
+          <span class="filter-active-dot" id="filterActiveDot"></span>
+        </button>
+
+        <!-- Dropdown panel -->
+        <div class="filter-dropdown" id="filterDropdown">
+          <div class="filter-dropdown-header">
+            <span class="filter-dropdown-title">Filter Tasks</span>
+            <button class="filter-clear-btn" id="filterClearBtn">Clear all</button>
+          </div>
+
+          <div class="filter-section">
+            <p class="filter-section-label">Priority</p>
+            <div class="filter-option-list">
+              <button class="filter-opt" data-filter="all">
+                <!-- PRIORITY -->
+                <span class="filter-opt-icon all-icon">☰</span>
+                All Tasks
+                <span class="filter-opt-check" id="check-all">✓</span>
+              </button>
+              <button class="filter-opt" data-filter="high">
+                <span class="filter-opt-dot" style="background:#f87171"></span>
+                High
+                <span class="filter-opt-check" id="check-high"></span>
+              </button>
+              <button class="filter-opt" data-filter="medium">
+                <span class="filter-opt-dot" style="background:#facc15"></span>
+                Medium
+                <span class="filter-opt-check" id="check-medium"></span>
+              </button>
+              <button class="filter-opt" data-filter="low">
+                <span class="filter-opt-dot" style="background:#4ade80"></span>
+                Low
+                <span class="filter-opt-check" id="check-low"></span>
+              </button>
+            </div>
+          </div>
+                <!-- STATUS -->
+          <div class="filter-divider"></div>
+
+          <div class="filter-section">
+            <p class="filter-section-label">Status</p>
+            <div class="filter-option-list">
+              <button class="filter-opt" data-filter="complete">
+                <span class="filter-opt-icon complete-icon">✓</span>
+                Complete
+                <span class="filter-opt-check" id="check-complete"></span>
+              </button>
+              <button class="filter-opt" data-filter="incomplete">
+                <span class="filter-opt-icon incomplete-icon">○</span>
+                Incomplete
+                <span class="filter-opt-check" id="check-incomplete"></span>
+              </button>
+            </div>
+          </div>
+                <!-- ASSIGNEE -->
+          <div class="filter-divider"></div>
+
+          <div class="filter-section">
+            <p class="filter-section-label">Assignee</p>
+            <div class="filter-option-list" id="assigneeFilterList">
+              <!-- Injected by JS -->
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <button class="btn-accent" id="addTaskBtn">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      Add Task
+    </button>
+  </div>
+</header>
+
+<!-- ══════════ KANBAN BOARD ══════════ -->
+<div class="board-wrap">
+  <div class="kanban" id="kanban">
+    <!-- Columns injected by tasks.js -->
+  </div>
+</div>
+
+<!-- ══════════ ADD / EDIT COLUMN MODAL ══════════ -->
+<div class="overlay" id="colOverlay">
+  <div class="modal modal-sm">
+    <div class="modal-header">
+      <h2 id="colModalTitle">Add New List</h2>
+      <button class="icon-close" id="colCloseBtn">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="form-card">
+      <div class="form-group">
+        <label for="colNameInput">List Name</label>
+        <input type="text" id="colNameInput" placeholder="e.g. Backlog, QA, Blocked…"/>
+        <span class="field-error" id="colNameErr"></span>
+      </div>
+      <div class="form-group" style="margin-top:14px;">
+        <label>Column Color</label>
+        <div class="color-opts" id="colorOpts">
+          <button class="color-dot active" data-color="#60a5fa" style="background:#60a5fa"></button>
+          <button class="color-dot" data-color="#f4856a" style="background:#f4856a"></button>
+          <button class="color-dot" data-color="#4ade80" style="background:#4ade80"></button>
+          <button class="color-dot" data-color="#a78bfa" style="background:#a78bfa"></button>
+          <button class="color-dot" data-color="#facc15" style="background:#facc15"></button>
+          <button class="color-dot" data-color="#f87171" style="background:#f87171"></button>
+          <button class="color-dot" data-color="#fb923c" style="background:#fb923c"></button>
+          <button class="color-dot" data-color="#e879f9" style="background:#e879f9"></button>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-cancel" id="colCancelBtn">Cancel</button>
+        <button class="btn-primary" id="colSaveBtn">Create List</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ ADD TASK MODAL ══════════ -->
+<div class="overlay" id="addTaskOverlay">
+  <div class="modal modal-sm">
+    <div class="modal-header">
+      <h2>Add Task</h2>
+      <button class="icon-close" id="addTaskCloseBtn">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="form-card">
+      <div class="form-group">
+        <label for="newTaskTitle">Task Title <span class="req">*</span></label>
+        <input type="text" id="newTaskTitle" placeholder="e.g. Design new onboarding flow"/>
+        <span class="field-error" id="newTaskTitleErr"></span>
+      </div>
+      <div class="form-group" style="margin-top:14px;">
+        <label for="newTaskDesc">Description</label>
+        <textarea id="newTaskDesc" class="textarea" placeholder="Add details, context, or notes…" rows="3"></textarea>
+      </div>
+      <div class="form-row" style="margin-top:14px;">
+        <div class="form-group">
+          <label for="newTaskAssignee">Assignee</label>
+          <div class="select-wrap">
+            <select id="newTaskAssignee" class="select">
+              <option>Alex Morgan</option>
+              <option>Sarah Chen</option>
+              <option>David Kim</option>
+              <option>Mia Torres</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="newTaskCol">List</label>
+          <div class="select-wrap">
+            <select id="newTaskCol" class="select" id="newTaskCol">
+              <!-- Options injected by JS -->
+            </select>
+          </div>
+        </div>
+      </div>
+      <div class="form-group" style="margin-top:14px;">
+        <label>Priority</label>
+        <div class="priority-opts">
+          <button class="priority-opt" data-p="low">Low</button>
+          <button class="priority-opt active" data-p="medium">Medium</button>
+          <button class="priority-opt" data-p="high">High</button>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-cancel" id="addTaskCancelBtn">Cancel</button>
+        <button class="btn-primary" id="addTaskSaveBtn">Add Task</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ TASK DETAIL MODAL ══════════ -->
+<div class="overlay" id="taskDetailOverlay">
+  <div class="modal modal-lg">
+    <div class="task-detail-layout">
+
+      <!-- LEFT: main content -->
+      <div class="task-detail-main">
+        <div class="task-detail-top">
+          <div class="task-detail-meta-row">
+            <span class="task-detail-col-label" id="detailColLabel"></span>
+            <span class="task-priority-badge" id="detailPriority"></span>
+          </div>
+          <button class="icon-close" id="taskDetailCloseBtn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+
+        <!-- Title (editable) -->
+        <div class="detail-title-wrap">
+          <button class="complete-toggle" id="detailCompleteBtn" title="Toggle complete">
+            <svg id="completeCheckIcon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/></svg>
+          </button>
+          <h2 class="detail-title" id="detailTitle" contenteditable="true" spellcheck="false"></h2>
+        </div>
+
+        <!-- Description -->
+        <div class="detail-section">
+          <div class="detail-section-label">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            Description
+          </div>
+          <textarea class="detail-desc" id="detailDesc" placeholder="Add a description…" rows="4"></textarea>
+        </div>
+
+        <!-- Attachments -->
+        <div class="detail-section">
+          <div class="detail-section-label">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+            Attachments
+          </div>
+          <div class="attachment-list" id="attachmentList"></div>
+          <label class="attach-upload-btn">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Attach File
+            <input type="file" id="fileInput" multiple style="display:none;"/>
+          </label>
+        </div>
+
+        <!-- Activity / Comments -->
+        <div class="detail-section">
+          <div class="detail-section-label">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            Activity
+          </div>
+          <div class="comment-list" id="commentList"></div>
+          <div class="comment-input-wrap">
+            <div class="comment-av" id="commentAv">A</div>
+            <div class="comment-input-box">
+              <input type="text" id="commentInput" class="comment-input" placeholder="Write a comment…"/>
+              <button class="comment-send" id="commentSend">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT: sidebar meta -->
+      <div class="task-detail-sidebar">
+        <div class="sidebar-section-block">
+          <p class="sidebar-meta-label">Assignee</p>
+          <div class="sidebar-assignee" id="detailAssigneeWrap">
+            <div class="sidebar-av" id="detailAssigneeAv"></div>
+            <select id="detailAssignee" class="select select-sm">
+              <option>Alex Morgan</option>
+              <option>Sarah Chen</option>
+              <option>David Kim</option>
+              <option>Mia Torres</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="sidebar-section-block">
+          <p class="sidebar-meta-label">Priority</p>
+          <div class="priority-opts-sm" id="detailPriorityOpts">
+            <button class="priority-chip" data-p="low">Low</button>
+            <button class="priority-chip" data-p="medium">Medium</button>
+            <button class="priority-chip" data-p="high">High</button>
+          </div>
+        </div>
+
+        <div class="sidebar-section-block">
+          <p class="sidebar-meta-label">List</p>
+          <div class="select-wrap">
+            <select id="detailCol" class="select select-sm"></select>
+          </div>
+        </div>
+
+        <div class="sidebar-section-block">
+          <p class="sidebar-meta-label">Status</p>
+          <div class="detail-status" id="detailStatus"></div>
+        </div>
+
+        <div class="sidebar-section-block">
+          <p class="sidebar-meta-label">Created</p>
+          <p class="sidebar-meta-value" id="detailCreated"></p>
+        </div>
+
+        <!-- Actions -->
+        <div class="sidebar-actions">
+          <button class="sidebar-action-btn complete-action" id="sidebarCompleteBtn">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+            <span id="sidebarCompleteBtnLabel">Mark Complete</span>
+          </button>
+          <button class="sidebar-action-btn delete-action" id="detailDeleteBtn">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+            Delete Task
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script src="{% static 'js/taskboard.js' %}"></script>
+</body>
+</html>

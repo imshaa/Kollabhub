@@ -35,5 +35,7 @@ urlpatterns = [
     path("api/workspace/<int:workspace_id>/create-invite/", views.create_invite_link),
     path("api/invite/<int:invite_id>/revoke/", views.revoke_invite),
     path("invite/<uuid:token>/", views.join_workspace_invite),
+            # ---Taskboard-----
+    path("taskboard/<int:workspace_id>/", views.taskboard, name="taskboard"),
 
 ] 
