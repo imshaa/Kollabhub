@@ -43,13 +43,13 @@
         Chat
       </button>
             <!-- TASKS BTN -->
-      <button onclick="window.location.href='/taskboard/'" class="nav-item" id="taskBtn">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <rect x="3" y="3" width="18" height="18" rx="2"/>
-          <path d="M9 12l2 2 4-4"/>
-        </svg>
-        Tasks
-      </button>
+    <a href="{% url 'taskboard' workspace.id %}" class="nav-item" id="taskBtn">
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="3" y="3" width="18" height="18" rx="2"/>
+        <path d="M9 12l2 2 4-4"/>
+    </svg>
+    Tasks
+</a>
       <!-- SETTING BTN -->
       <button class="nav-item" data-view="settings">
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93A10 10 0 1 0 4.93 19.07 10 10 0 0 0 19.07 4.93z"/></svg>

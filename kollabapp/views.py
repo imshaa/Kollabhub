@@ -159,11 +159,12 @@ def chatui(request, workspace_id):
         "dm_members": dm_members
     })
 # ------------------------------ TaskBoard logic---------------------------
-    from django.shortcuts import render
+def taskboard(request, workspace_id):
+    workspace = Workspace.objects.get(id=workspace_id)
 
-    def taskboard(request, workspace_id):
-        return render(request, "taskboard.html", {"workspace_id": workspace_id})
-
+    return render(request, "taskboard.html", {
+        "workspace": workspace
+    })
 # ------------------------------ Workspace logic---------------------------
 @login_required
 def workspace(request):
