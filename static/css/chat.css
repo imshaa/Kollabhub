@@ -135,6 +135,10 @@ html, body {
 }
 .nav-item:hover  { background: var(--border-soft); color: var(--text-300); }
 .nav-item.active { background: rgba(244,133,106,0.10); color: var(--accent); }
+.nav-item .badge,
+.dm-item .badge {
+  margin-left: auto;
+}
 
 /* Section groups */
 .sidebar-section {
@@ -433,11 +437,16 @@ html, body {
 
 /* date divider */
 .msg-date-divider {
-  text-align: center;
-  font-size: .7rem;
-  color: var(--text-500);
-  padding: 14px 0 6px;
-  letter-spacing: 0.04em;
+  display: inline-flex;
+  align-self: center;
+  padding: 8px 14px;
+  margin: 16px auto 10px;
+  border-radius: 999px;
+  background: rgba(244,133,106,0.12);
+  color: var(--text-300);
+  font-size: .72rem;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
 }
 
 /* chat input */
@@ -524,6 +533,118 @@ html, body {
   to   { opacity:1; transform:translateY(0); }
 }
 
+/* ─────────────────────────────────────────────────
+   TASK BOARD (KANBAN)
+───────────────────────────────────────────────── */
+.kanban {
+  flex: 1;
+  display: flex;
+  gap: 16px;
+  padding: 20px;
+  overflow-x: auto;
+  align-items: flex-start;
+}
+
+.kanban-col {
+  width: 260px;
+  flex-shrink: 0;
+  background: #111;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  display: flex;
+  flex-direction: column;
+  max-height: 100%;
+}
+
+.kanban-col-header {
+  padding: 12px 14px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.col-title {
+  font-family: 'Syne', sans-serif;
+  font-size: .8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.col-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+}
+
+.col-count {
+  font-size: .72rem;
+  color: var(--text-500);
+  background: var(--surface);
+  padding: 2px 7px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+}
+
+.kanban-cards {
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.task-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 13px;
+  cursor: pointer;
+  transition: border-color .2s, transform .2s, box-shadow .2s;
+  animation: fadeInUp .3s ease both;
+}
+.task-card:hover {
+  border-color: var(--border-focus);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 24px rgba(0,0,0,0.4);
+}
+
+.task-card-title {
+  font-size: .82rem;
+  font-weight: 500;
+  color: var(--text-300);
+  line-height: 1.4;
+  margin-bottom: 10px;
+}
+
+.task-card-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.task-priority {
+  font-size: .65rem;
+  font-weight: 700;
+  letter-spacing: .05em;
+  padding: 2px 7px;
+  border-radius: 20px;
+  text-transform: uppercase;
+}
+.task-priority.low    { background: var(--green-dim); color: var(--green); }
+.task-priority.medium { background: rgba(250,204,21,0.12); color: #facc15; }
+.task-priority.high   { background: var(--red-dim); color: var(--red); }
+
+.task-assignee {
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: .65rem; font-weight: 700; color: #fff;
+}
 
 /* ─────────────────────────────────────────────────
    SETTINGS VIEW
@@ -1359,3 +1480,253 @@ input::placeholder, textarea::placeholder { color: var(--muted); font-weight: 30
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 10px; }
 ::-webkit-scrollbar-thumb:hover { background: #444; }
+
+
+/* ── Notification Badges ──────────────────────────────────────────────────── */
+
+/* Base badge style — used on nav items and DM items */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--accent, #f4856a);
+  color: #fff;
+  font-size: .65rem;
+  font-weight: 700;
+  letter-spacing: .02em;
+  line-height: 1;
+  flex-shrink: 0;
+  pointer-events: none;
+  animation: badgePop .2s cubic-bezier(.34,1.56,.64,1) both;
+}
+
+@keyframes badgePop {
+  from { transform: scale(0); opacity: 0; }
+  to   { transform: scale(1); opacity: 1; }
+}
+
+/* Nav badge — sits to the right of the nav item label */
+.nav-badge {
+  margin-left: auto;
+}
+
+/* DM badge — sits inline inside the dm-item button */
+.dm-badge {
+  margin-left: auto;
+  background: var(--accent, #f4856a);
+}
+
+/* Make sure nav-item is flex so badge aligns right */
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  position: relative;
+}
+
+/* DM item also needs flex */
+.dm-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+/* Board settings button in taskboard header */
+.board-settings-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background: var(--surface, #1a1a1a);
+  border: 1px solid var(--border, #272727);
+  color: var(--text-400, #a3a3a3);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background .15s, color .15s, border-color .15s;
+}
+.board-settings-btn:hover {
+  background: var(--surface2, #222);
+  border-color: var(--accent, #f4856a);
+  color: var(--accent, #f4856a);
+}
+
+/* ── Board Settings Modal ─────────────────────────────────────────────────── */
+.board-settings-modal {
+  max-width: 780px;
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.bset-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.bset-nav {
+  width: 160px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--border-soft, rgba(255,255,255,.05));
+  padding: 12px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.bset-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 9px 10px;
+  border-radius: 8px;
+  background: none;
+  border: none;
+  color: var(--text-400, #a3a3a3);
+  font-family: 'DM Sans', sans-serif;
+  font-size: .8rem;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: left;
+  transition: background .15s, color .15s;
+}
+.bset-nav-item:hover  { background: var(--border-soft); color: var(--text-300, #d4d4d4); }
+.bset-nav-item.active { background: var(--accent-dim, rgba(244,133,106,.10)); color: var(--accent, #f4856a); }
+
+.bset-panels {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 24px;
+}
+
+.bset-panel { display: none; }
+.bset-panel.active { display: block; }
+
+.bset-panel-desc {
+  font-size: .8rem;
+  color: var(--text-500, #737373);
+  margin-bottom: 16px;
+  line-height: 1.5;
+}
+
+.bset-section-title {
+  font-size: .7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  color: var(--text-500, #737373);
+  margin-bottom: 8px;
+}
+
+.bset-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.bset-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--surface, #1a1a1a);
+  border: 1px solid var(--border-soft, rgba(255,255,255,.05));
+}
+
+.bset-row-info { flex: 1; min-width: 0; }
+.bset-row-label {
+  font-size: .82rem;
+  font-weight: 500;
+  color: var(--text-300, #d4d4d4);
+  margin-bottom: 2px;
+}
+.bset-row-hint {
+  font-size: .72rem;
+  color: var(--text-500, #737373);
+}
+
+.bset-select {
+  appearance: none;
+  background: var(--surface2, #222);
+  border: 1px solid var(--border, #272727);
+  border-radius: 7px;
+  color: var(--text, #f0f0f0);
+  font-family: 'DM Sans', sans-serif;
+  font-size: .78rem;
+  padding: 6px 24px 6px 8px;
+  cursor: pointer;
+  outline: none;
+  min-width: 130px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 6px center;
+  background-size: 11px;
+  transition: border-color .15s;
+}
+.bset-select:focus { border-color: var(--accent, #f4856a); }
+
+/* Toggle switch */
+.bset-toggle {
+  position: relative;
+  width: 40px;
+  height: 22px;
+  border-radius: 11px;
+  background: var(--border, #272727);
+  border: none;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background .2s;
+  padding: 0;
+}
+.bset-toggle.active { background: var(--accent, #f4856a); }
+.bset-toggle-knob {
+  position: absolute;
+  top: 3px; left: 3px;
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform .2s;
+  display: block;
+}
+.bset-toggle.active .bset-toggle-knob { transform: translateX(18px); }
+
+/* Number input */
+.bset-number {
+  width: 80px;
+  background: var(--surface2, #222);
+  border: 1px solid var(--border, #272727);
+  border-radius: 7px;
+  color: var(--text, #f0f0f0);
+  font-family: 'DM Sans', sans-serif;
+  font-size: .82rem;
+  padding: 6px 8px;
+  outline: none;
+  text-align: center;
+  transition: border-color .15s;
+}
+.bset-number:focus { border-color: var(--accent, #f4856a); }
+
+/* Footer */
+.bset-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 24px;
+  border-top: 1px solid var(--border-soft, rgba(255,255,255,.05));
+  flex-shrink: 0;
+}
+.bset-last-saved {
+  font-size: .72rem;
+  color: var(--text-500, #737373);
+}

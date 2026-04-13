@@ -1,7 +1,9 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth import get_user_model
+from django.views.decorators.http import require_POST, require_GET
 from django.contrib import messages
+from django.contrib import messages as django_messages
 from django.contrib.auth.decorators import login_required
 from .models import CustomUser
 from .models import Workspace
@@ -9,13 +11,16 @@ from .models import WorkspaceMembership
 from .models import Message
 from .models import DirectMessage
 from .models import Invitation
+from .models import Task
+from .models import TaskList, TaskComment, TaskAttachment, TaskboardSettings, Notification
 import json
 from django.http import JsonResponse
 from django.db import models
-from django.db.models import Q
+from django.db.models import Q, Count
 from django.utils import timezone
 from datetime import timedelta
-
+from asgiref.sync import async_to_sync
+from channels.layers import get_channel_layer
 
 User = get_user_model()  # This gets CustomUser
 
@@ -111,10 +116,12 @@ def update_profile(request):
         user.status = status
 
         if profile_picture:
+            if profile_picture.size > TaskAttachment.IMAGE_MAX:
+                messages.error(request, "Profile image must be under 1 MB.")
+                return redirect(request.META.get("HTTP_REFERER", "profile"))
             user.profile_picture = profile_picture
 
         user.save()
-        messages.success(request, "Profile updated successfully.")
         return redirect(request.META.get("HTTP_REFERER", "profile"))
 
     return redirect("home")
@@ -153,18 +160,16 @@ def chatui(request, workspace_id):
     # exclude yourself from DM list
     dm_members = members.exclude(user=request.user)
 
+    notification_counts = _get_notification_counts(workspace, request.user)
+
     return render(request, "chatui.html", {
         "workspace": workspace,
         "members": members,
-        "dm_members": dm_members
+        "dm_members": dm_members,
+        "notification_counts": notification_counts,
+        "notification_counts_json": json.dumps(notification_counts),
     })
-# ------------------------------ TaskBoard logic---------------------------
-def taskboard(request, workspace_id):
-    workspace = Workspace.objects.get(id=workspace_id)
 
-    return render(request, "taskboard.html", {
-        "workspace": workspace
-    })
 # ------------------------------ Workspace logic---------------------------
 @login_required
 def workspace(request):
@@ -185,6 +190,10 @@ def workspace(request):
 
         if not image:
             messages.error(request, "Workspace image is required.")
+            return redirect("profile")
+
+        if image.size > TaskAttachment.IMAGE_MAX:
+            messages.error(request, "Workspace image must be under 1 MB.")
             return redirect("profile")
 
         # NEW LIMIT: max 50 workspaces total (admin + member)
@@ -219,16 +228,12 @@ def workspace(request):
                 workspace.image = image
 
             workspace.save()
-
-            messages.success(request, f"Workspace '{title}' updated successfully!")
         else:
             WorkspaceMembership.objects.create(
                 workspace=workspace,
                 user=request.user,
                 role="admin"
             )
-            messages.success(request, f"Workspace '{title}' created successfully!")
-
 
         return redirect("chatui", workspace_id=workspace.id)
 
@@ -1164,3 +1169,801 @@ def join_workspace_invite(request, token):
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=500)
 
+# ------------------------------ TaskBoard logic---------------------------
+
+
+# ─── constants ────────────────────────────────────────────────────────────────
+ 
+DEFAULT_LISTS = [
+    {"name": "To Do",       "color": "#60a5fa", "position": 0},
+    {"name": "In Progress", "color": "#facc15", "position": 1},
+    {"name": "In Review",   "color": "#a78bfa", "position": 2},
+    {"name": "Done",        "color": "#4ade80", "position": 3},
+]
+ 
+VALID_PERM_FIELDS = {
+    "who_can_create_tasks", "who_can_edit_tasks", "who_can_delete_tasks",
+    "who_can_move_tasks", "who_can_create_lists", "who_can_edit_lists",
+    "who_can_delete_lists", "who_can_attach_files", "who_can_comment",
+}
+VALID_BOOL_FIELDS = {
+    "allow_due_dates", "allow_task_priorities", "allow_task_assignees",
+    "allow_attachments", "allow_comments", "allow_task_desc",
+    "notify_on_task_create", "notify_on_task_done",
+    "notify_on_comment", "notify_on_assign",
+}
+VALID_INT_FIELDS = {"max_tasks_per_list", "max_lists"}
+VALID_PERM_VALUES = {"all_members", "admin_only"}
+ 
+ 
+# ─── shared helpers ───────────────────────────────────────────────────────────
+ 
+def _get_membership(workspace, user):
+    try:
+        return WorkspaceMembership.objects.get(workspace=workspace, user=user)
+    except WorkspaceMembership.DoesNotExist:
+        return None
+ 
+def _is_member(workspace, user):
+    return WorkspaceMembership.objects.filter(workspace=workspace, user=user).exists()
+ 
+def _is_admin(workspace, user):
+    return WorkspaceMembership.objects.filter(
+        workspace=workspace, user=user, role="admin"
+    ).exists()
+ 
+def _get_or_create_settings(workspace):
+    ts, _ = TaskboardSettings.objects.get_or_create(workspace=workspace)
+    return ts
+ 
+def _ensure_default_lists(workspace):
+    if not TaskList.objects.filter(workspace=workspace).exists():
+        for d in DEFAULT_LISTS:
+            TaskList.objects.create(workspace=workspace, **d, is_default=True)
+ 
+def _check_perm(ts, field, workspace, user):
+    """
+    Return True if the user is allowed to do the action described by `field`.
+    Admins always pass. Non-admins pass only if the field is 'all_members'.
+    """
+    if _is_admin(workspace, user):
+        return True
+    value = getattr(ts, field, "all_members")
+    return value == "all_members"
+ 
+def _over_list_limit(workspace, ts):
+    if ts.max_lists == 0:
+        return False
+    return TaskList.objects.filter(workspace=workspace).count() >= ts.max_lists
+ 
+def _over_task_limit(task_list, ts):
+    if ts.max_tasks_per_list == 0:
+        return False
+    return Task.objects.filter(task_list=task_list).count() >= ts.max_tasks_per_list
+ 
+def _broadcast_taskboard_event(workspace_id, payload):
+    channel_layer = get_channel_layer()
+    if channel_layer is None:
+        return
+    payload = payload.copy()
+    payload.setdefault('type', 'taskboard_event')
+    async_to_sync(channel_layer.group_send)(f"taskboard_{workspace_id}", payload)
+ 
+def _broadcast_workspace_event(workspace_id, payload):
+    channel_layer = get_channel_layer()
+    if channel_layer is None:
+        return
+    payload = payload.copy()
+    payload.setdefault('type', 'notification_event')
+    async_to_sync(channel_layer.group_send)(f"workspace_{workspace_id}", payload)
+ 
+def _create_notification_records(workspace, user_ids, actor, section, notification_type, message, reference_id=None):
+    notifications = []
+    for user_id in user_ids:
+        notifications.append(Notification(
+            workspace=workspace,
+            user_id=user_id,
+            actor=actor,
+            section=section,
+            notification_type=notification_type,
+            message=message,
+            reference_id=str(reference_id) if reference_id is not None else None,
+        ))
+    Notification.objects.bulk_create(notifications)
+ 
+def _notify_workspace_users(workspace, actor, section, notification_type, message, reference_id=None, target_user_id=None, extra_user_ids=None):
+    membership_qs = WorkspaceMembership.objects.filter(workspace=workspace)
+    if extra_user_ids is not None:
+        membership_qs = membership_qs.filter(user_id__in=extra_user_ids)
+    if actor is not None:
+        membership_qs = membership_qs.exclude(user=actor)
+    user_ids = list(membership_qs.values_list('user_id', flat=True))
+    if user_ids:
+        _create_notification_records(workspace, user_ids, actor, section, notification_type, message, reference_id)
+    payload = {
+        "notification": True,
+        "notification_section": section,
+        "notification_type": notification_type,
+        "notification_message": message,
+        "notification_actor_id": actor.id if actor else None,
+    }
+    if target_user_id is not None:
+        payload["notification_target_user_id"] = target_user_id
+    if reference_id is not None:
+        payload["notification_reference_id"] = str(reference_id)
+    _broadcast_workspace_event(workspace.id, payload)
+ 
+def _get_notification_counts(workspace, user):
+    unread_qs = Notification.objects.filter(workspace=workspace, user=user, is_read=False)
+    chat_count = unread_qs.filter(section='chat').count()
+    taskboard_count = unread_qs.filter(section='taskboard').count()
+    dm_items = unread_qs.filter(section='dm').values('actor_id').annotate(count=Count('id'))
+    dm_counts = {str(item['actor_id']): item['count'] for item in dm_items if item['actor_id']}
+    return {
+        'chat': chat_count,
+        'taskboard': taskboard_count,
+        'dm_counts': dm_counts,
+        'dm_total': sum(dm_counts.values()),
+    }
+ 
+@login_required
+@require_GET
+def notification_counts_api(request, workspace_id):
+    workspace = get_object_or_404(Workspace, id=workspace_id)
+    if not _is_member(workspace, request.user):
+        return JsonResponse({"error": "Not a member"}, status=403)
+    return JsonResponse(_get_notification_counts(workspace, request.user))
+ 
+@login_required
+@require_POST
+def notification_mark_read(request, workspace_id):
+    workspace = get_object_or_404(Workspace, id=workspace_id)
+    if not _is_member(workspace, request.user):
+        return JsonResponse({"error": "Not a member"}, status=403)
+    try:
+        body = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+    section = body.get('section')
+    if section == 'chat':
+        Notification.objects.filter(workspace=workspace, user=request.user, section='chat', is_read=False).update(is_read=True)
+    elif section == 'taskboard':
+        Notification.objects.filter(workspace=workspace, user=request.user, section='taskboard', is_read=False).update(is_read=True)
+    elif section == 'dm':
+        other_id = body.get('other_user_id')
+        if not other_id:
+            return JsonResponse({"error": "other_user_id is required for DM read receipts."}, status=400)
+        Notification.objects.filter(
+            workspace=workspace,
+            user=request.user,
+            section='dm',
+            actor_id=other_id,
+            is_read=False
+        ).update(is_read=True)
+    elif section == 'all':
+        Notification.objects.filter(workspace=workspace, user=request.user, is_read=False).update(is_read=True)
+    else:
+        return JsonResponse({"error": "Invalid section"}, status=400)
+    return JsonResponse(_get_notification_counts(workspace, request.user))
+ 
+
+def _serialize_settings(ts):
+    return {
+        "who_can_create_tasks":  ts.who_can_create_tasks,
+        "who_can_edit_tasks":    ts.who_can_edit_tasks,
+        "who_can_delete_tasks":  ts.who_can_delete_tasks,
+        "who_can_move_tasks":    ts.who_can_move_tasks,
+        "who_can_create_lists":  ts.who_can_create_lists,
+        "who_can_edit_lists":    ts.who_can_edit_lists,
+        "who_can_delete_lists":  ts.who_can_delete_lists,
+        "who_can_attach_files":  ts.who_can_attach_files,
+        "who_can_comment":       ts.who_can_comment,
+        "allow_due_dates":       ts.allow_due_dates,
+        "allow_task_priorities": ts.allow_task_priorities,
+        "allow_task_assignees":  ts.allow_task_assignees,
+        "allow_attachments":     ts.allow_attachments,
+        "allow_comments":        ts.allow_comments,
+        "allow_task_desc":       ts.allow_task_desc,
+        "notify_on_task_create": ts.notify_on_task_create,
+        "notify_on_task_done":   ts.notify_on_task_done,
+        "notify_on_comment":     ts.notify_on_comment,
+        "notify_on_assign":      ts.notify_on_assign,
+        "max_tasks_per_list":    ts.max_tasks_per_list,
+        "max_lists":             ts.max_lists,
+        "updated_at":            ts.updated_at.isoformat() if ts.updated_at else None,
+        "updated_by":            ts.updated_by.display_name or ts.updated_by.username if ts.updated_by else None,
+    }
+ 
+def _serialize_list(tl):
+    return {
+        "id":         tl.id,
+        "name":       tl.name,
+        "color":      tl.color,
+        "position":   tl.position,
+        "is_default": tl.is_default,
+    }
+ 
+def _serialize_task(task):
+    att_list, cmt_list = [], []
+    for a in task.attachments.select_related("uploaded_by").all():
+        att_list.append({
+            "id":            a.id,
+            "type":          a.attachment_type,
+            "original_name": a.original_name,
+            "file_size":     a.file_size,
+            "link_url":      a.link_url,
+            "url":           a.file.url if a.file else None,
+            "uploaded_by":   (a.uploaded_by.display_name or a.uploaded_by.username) if a.uploaded_by else None,
+            "created_at":    a.created_at.isoformat(),
+        })
+    for c in task.comments.select_related("author").all():
+        cmt_list.append({
+            "id":           c.id,
+            "author":       c.author.display_name or c.author.username,
+            "author_avatar": c.author.profile_picture.url if c.author.profile_picture else None,
+            "text":         c.text,
+            "created_at":   c.created_at.isoformat(),
+        })
+    return {
+        "id":               task.id,
+        "title":            task.title,
+        "description":      task.description,
+        "task_list_id":     task.task_list_id,
+        "priority":         task.priority,
+        "complete":         task.complete,
+        "assignee_id":      task.assignee_id,
+        "assignee_display": (task.assignee.display_name or task.assignee.username) if task.assignee else None,
+        "created_at":       task.created_at.isoformat(),
+        "attachments":      att_list,
+        "comments":         cmt_list,
+    }
+ 
+ 
+# ─── page ─────────────────────────────────────────────────────────────────────
+ 
+@login_required
+def taskboard(request, workspace_id):
+    workspace = get_object_or_404(Workspace, id=workspace_id)
+ 
+    if not _is_member(workspace, request.user):
+        django_messages.error(request, "You are not part of this workspace.")
+        return redirect("profile")
+ 
+    _ensure_default_lists(workspace)
+    ts = _get_or_create_settings(workspace)
+ 
+    members    = WorkspaceMembership.objects.filter(workspace=workspace).select_related("user")
+    dm_members = members.exclude(user=request.user)
+    is_admin   = _is_admin(workspace, request.user)
+ 
+    # Effective permissions for this user (passed to template → JS)
+    perms = {
+        "can_create_tasks":  _check_perm(ts, "who_can_create_tasks",  workspace, request.user),
+        "can_edit_tasks":    _check_perm(ts, "who_can_edit_tasks",    workspace, request.user),
+        "can_delete_tasks":  _check_perm(ts, "who_can_delete_tasks",  workspace, request.user),
+        "can_move_tasks":    _check_perm(ts, "who_can_move_tasks",    workspace, request.user),
+        "can_create_lists":  _check_perm(ts, "who_can_create_lists",  workspace, request.user),
+        "can_edit_lists":    _check_perm(ts, "who_can_edit_lists",    workspace, request.user),
+        "can_delete_lists":  _check_perm(ts, "who_can_delete_lists",  workspace, request.user),
+        "can_attach_files":  _check_perm(ts, "who_can_attach_files",  workspace, request.user),
+        "can_comment":       _check_perm(ts, "who_can_comment",       workspace, request.user),
+    }
+ 
+    notification_counts = _get_notification_counts(workspace, request.user)
+    return render(request, "taskboard.html", {
+        "workspace":  workspace,
+        "members":    members,
+        "dm_members": dm_members,
+        "is_admin":   is_admin,
+        "perms":      perms,
+        "ts":         ts,
+        "notification_counts": notification_counts,
+        "notification_counts_json": json.dumps(notification_counts),
+    })
+ 
+ 
+# ─── taskboard settings API ───────────────────────────────────────────────────
+ 
+@login_required
+@require_GET
+def taskboard_settings_get(request, workspace_id):
+    workspace = get_object_or_404(Workspace, id=workspace_id)
+    if not _is_member(workspace, request.user):
+        return JsonResponse({"error": "Not a member"}, status=403)
+    ts = _get_or_create_settings(workspace)
+    return JsonResponse({
+        "settings":   _serialize_settings(ts),
+        "is_admin":   _is_admin(workspace, request.user),
+    })
+ 
+ 
+@login_required
+@require_POST
+def taskboard_settings_update(request, workspace_id):
+    workspace = get_object_or_404(Workspace, id=workspace_id)
+    if not _is_admin(workspace, request.user):
+        return JsonResponse({"error": "Only admins can change board settings."}, status=403)
+ 
+    try:
+        body = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+ 
+    ts = _get_or_create_settings(workspace)
+    errors = []
+ 
+    for field, value in body.items():
+        if field in VALID_PERM_FIELDS:
+            if value not in VALID_PERM_VALUES:
+                errors.append(f"Invalid value '{value}' for {field}")
+                continue
+            setattr(ts, field, value)
+        elif field in VALID_BOOL_FIELDS:
+            setattr(ts, field, bool(value))
+        elif field in VALID_INT_FIELDS:
+            try:
+                v = int(value)
+                if v < 0:
+                    raise ValueError
+                setattr(ts, field, v)
+            except (ValueError, TypeError):
+                errors.append(f"Invalid value for {field}: must be non-negative integer")
+        else:
+            # silently ignore unknown fields (safe)
+            pass
+ 
+    if errors:
+        return JsonResponse({"error": "; ".join(errors)}, status=400)
+ 
+    ts.updated_by = request.user
+    ts.save()
+
+    settings_payload = _serialize_settings(ts)
+    _broadcast_workspace_event(workspace.id, {
+        "notification": True,
+        "notification_section": "taskboard",
+        "notification_type": "settings_update",
+        "notification_message": f"{request.user.display_name or request.user.username} updated board settings",
+        "notification_actor_id": request.user.id,
+        "event_type": "settings_update",
+        "object": "settings",
+        "action": "update",
+        "settings": settings_payload,
+    })
+    _create_notification_records(
+        workspace,
+        list(WorkspaceMembership.objects.filter(workspace=workspace).exclude(user=request.user).values_list('user_id', flat=True)),
+        request.user,
+        'taskboard',
+        'settings_update',
+        f"{request.user.display_name or request.user.username} updated board settings",
+        reference_id=workspace.id,
+    )
+
+    return JsonResponse({"success": True, "settings": settings_payload})
+ 
+ 
+# ─── task lists ───────────────────────────────────────────────────────────────
+ 
+@login_required
+@require_GET
+def tasklists_api(request, workspace_id):
+    workspace = get_object_or_404(Workspace, id=workspace_id)
+    if not _is_member(workspace, request.user):
+        return JsonResponse({"error": "Not a member"}, status=403)
+    _ensure_default_lists(workspace)
+    lists = TaskList.objects.filter(workspace=workspace)
+    ts    = _get_or_create_settings(workspace)
+    return JsonResponse({
+        "lists":    [_serialize_list(l) for l in lists],
+        "settings": _serialize_settings(ts),
+    })
+ 
+ 
+@login_required
+@require_POST
+def tasklist_create(request, workspace_id):
+    workspace = get_object_or_404(Workspace, id=workspace_id)
+    if not _is_member(workspace, request.user):
+        return JsonResponse({"error": "Not a member"}, status=403)
+    ts = _get_or_create_settings(workspace)
+    if not _check_perm(ts, "who_can_create_lists", workspace, request.user):
+        return JsonResponse({"error": "You don't have permission to create lists."}, status=403)
+    if _over_list_limit(workspace, ts):
+        return JsonResponse({"error": f"Board limit reached ({ts.max_lists} lists max)."}, status=400)
+ 
+    try:
+        body = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+ 
+    name  = body.get("name", "").strip()
+    color = body.get("color", "#60a5fa").strip()
+    if not name:
+        return JsonResponse({"error": "Name is required"}, status=400)
+ 
+    last = TaskList.objects.filter(workspace=workspace).order_by("-position").first()
+    tl   = TaskList.objects.create(
+        workspace=workspace, name=name, color=color,
+        position=(last.position + 1 if last else 0), is_default=False,
+    )
+    _broadcast_taskboard_event(workspace.id, {
+        "action": "create",
+        "object": "list",
+        "list": _serialize_list(tl),
+    })
+    _notify_workspace_users(
+        workspace, request.user, 'taskboard', 'list_create',
+        f"{request.user.display_name or request.user.username} created list {tl.name}",
+        reference_id=tl.id,
+    )
+    return JsonResponse({"success": True, "list": _serialize_list(tl)}, status=201)
+ 
+ 
+@login_required
+def tasklist_update(request, workspace_id, list_id):
+    if request.method != "PATCH":
+        return JsonResponse({"error": "Method not allowed"}, status=405)
+    workspace = get_object_or_404(Workspace, id=workspace_id)
+    tl        = get_object_or_404(TaskList, id=list_id, workspace=workspace)
+    if not _is_member(workspace, request.user):
+        return JsonResponse({"error": "Not a member"}, status=403)
+    ts = _get_or_create_settings(workspace)
+    if not _check_perm(ts, "who_can_edit_lists", workspace, request.user):
+        return JsonResponse({"error": "You don't have permission to edit lists."}, status=403)
+ 
+    try:
+        body = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+ 
+    if "name" in body:
+        n = body["name"].strip()
+        if n: tl.name = n
+    if "color" in body:
+        tl.color = body["color"].strip()
+    tl.save()
+    _broadcast_taskboard_event(workspace.id, {
+        "action": "update",
+        "object": "list",
+        "list": _serialize_list(tl),
+    })
+    _notify_workspace_users(
+        workspace, request.user, 'taskboard', 'list_update',
+        f"{request.user.display_name or request.user.username} updated list {tl.name}",
+        reference_id=tl.id,
+    )
+    return JsonResponse({"success": True, "list": _serialize_list(tl)})
+ 
+ 
+@login_required
+@require_POST
+def tasklist_delete(request, workspace_id, list_id):
+    workspace = get_object_or_404(Workspace, id=workspace_id)
+    tl        = get_object_or_404(TaskList, id=list_id, workspace=workspace)
+    if not _is_member(workspace, request.user):
+        return JsonResponse({"error": "Not a member"}, status=403)
+    ts = _get_or_create_settings(workspace)
+    if not _check_perm(ts, "who_can_delete_lists", workspace, request.user):
+        return JsonResponse({"error": "You don't have permission to delete lists."}, status=403)
+    if tl.is_default:
+        return JsonResponse({"error": "Default lists cannot be deleted."}, status=400)
+    tl.delete()
+    _broadcast_taskboard_event(workspace.id, {
+        "action": "delete",
+        "object": "list",
+        "list_id": list_id,
+    })
+    _notify_workspace_users(
+        workspace, request.user, 'taskboard', 'list_delete',
+        f"{request.user.display_name or request.user.username} deleted a list",
+        reference_id=list_id,
+    )
+    return JsonResponse({"success": True})
+ 
+ 
+# ─── tasks ────────────────────────────────────────────────────────────────────
+ 
+@login_required
+@require_GET
+def tasks_api(request, workspace_id):
+    workspace = get_object_or_404(Workspace, id=workspace_id)
+    if not _is_member(workspace, request.user):
+        return JsonResponse({"error": "Not a member"}, status=403)
+    tasks = (Task.objects
+             .filter(workspace=workspace)
+             .select_related("assignee")
+             .prefetch_related("attachments__uploaded_by", "comments__author"))
+    return JsonResponse({"tasks": [_serialize_task(t) for t in tasks]})
+ 
+ 
+@login_required
+@require_POST
+def task_create(request, workspace_id):
+    workspace = get_object_or_404(Workspace, id=workspace_id)
+    if not _is_member(workspace, request.user):
+        return JsonResponse({"error": "Not a member"}, status=403)
+    ts = _get_or_create_settings(workspace)
+    if not _check_perm(ts, "who_can_create_tasks", workspace, request.user):
+        return JsonResponse({"error": "You don't have permission to create tasks."}, status=403)
+ 
+    try:
+        body = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+ 
+    title = body.get("title", "").strip()
+    if not title:
+        return JsonResponse({"error": "Title is required"}, status=400)
+ 
+    list_id = body.get("task_list_id")
+    tl      = get_object_or_404(TaskList, id=list_id, workspace=workspace) if list_id else None
+ 
+    if tl and _over_task_limit(tl, ts):
+        return JsonResponse(
+            {"error": f"List '{tl.name}' has reached its task limit ({ts.max_tasks_per_list})."},
+            status=400
+        )
+ 
+    assignee = None
+    aid = body.get("assignee_id")
+    if aid and ts.allow_task_assignees:
+        try:
+            m = WorkspaceMembership.objects.select_related("user").get(workspace=workspace, user_id=aid)
+            assignee = m.user
+        except WorkspaceMembership.DoesNotExist:
+            return JsonResponse({"error": "Assignee is not a workspace member."}, status=400)
+ 
+    priority = body.get("priority", "medium") if ts.allow_task_priorities else "medium"
+    desc     = body.get("description", "").strip() if ts.allow_task_desc else ""
+ 
+    task = Task.objects.create(
+        workspace=workspace, task_list=tl, title=title,
+        description=desc, priority=priority,
+        assignee=assignee, created_by=request.user,
+    )
+    _broadcast_taskboard_event(workspace.id, {
+        "action": "create",
+        "object": "task",
+        "task": _serialize_task(task),
+    })
+    _notify_workspace_users(
+        workspace, request.user, 'taskboard', 'task_create',
+        f"{request.user.display_name or request.user.username} created task {task.title}",
+        reference_id=task.id,
+    )
+    return JsonResponse({"success": True, "task": _serialize_task(task)}, status=201)
+ 
+ 
+@login_required
+def task_update(request, workspace_id, task_id):
+    if request.method != "PATCH":
+        return JsonResponse({"error": "Method not allowed"}, status=405)
+    workspace = get_object_or_404(Workspace, id=workspace_id)
+    task      = get_object_or_404(Task, id=task_id, workspace=workspace)
+    if not _is_member(workspace, request.user):
+        return JsonResponse({"error": "Not a member"}, status=403)
+    ts = _get_or_create_settings(workspace)
+ 
+    try:
+        body = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+ 
+    can_edit = _check_perm(ts, "who_can_edit_tasks", workspace, request.user)
+    can_move = _check_perm(ts, "who_can_move_tasks", workspace, request.user)
+ 
+    # Complete toggle: anyone who can edit OR move can toggle
+    if "complete" in body:
+        if not (can_edit or can_move):
+            return JsonResponse({"error": "Permission denied"}, status=403)
+        task.complete = bool(body["complete"])
+ 
+    # Move between lists
+    if "task_list_id" in body:
+        if not can_move:
+            return JsonResponse({"error": "You don't have permission to move tasks."}, status=403)
+        lid = body["task_list_id"]
+        tl  = get_object_or_404(TaskList, id=lid, workspace=workspace) if lid else None
+        task.task_list = tl
+ 
+    # Edit fields
+    if can_edit:
+        if "title" in body:
+            t = body["title"].strip()
+            if t: task.title = t
+        if "description" in body and ts.allow_task_desc:
+            task.description = body["description"].strip()
+        if "priority" in body and ts.allow_task_priorities:
+            valid = [p[0] for p in Task.PRIORITY_CHOICES]
+            if body["priority"] in valid:
+                task.priority = body["priority"]
+        if "assignee_id" in body and ts.allow_task_assignees:
+            aid = body["assignee_id"]
+            if aid is None:
+                task.assignee = None
+            else:
+                try:
+                    m = WorkspaceMembership.objects.select_related("user").get(
+                        workspace=workspace, user_id=aid)
+                    task.assignee = m.user
+                except WorkspaceMembership.DoesNotExist:
+                    return JsonResponse({"error": "Assignee not a member."}, status=400)
+    elif any(k in body for k in ("title", "description", "priority", "assignee_id")):
+        return JsonResponse({"error": "You don't have permission to edit tasks."}, status=403)
+ 
+    task.save()
+    _broadcast_taskboard_event(workspace.id, {
+        "action": "update",
+        "object": "task",
+        "task": _serialize_task(task),
+    })
+    _notify_workspace_users(
+        workspace, request.user, 'taskboard', 'task_update',
+        f"{request.user.display_name or request.user.username} updated task {task.title}",
+        reference_id=task.id,
+    )
+    return JsonResponse({"success": True, "task": _serialize_task(task)})
+ 
+ 
+@login_required
+@require_POST
+def task_delete(request, workspace_id, task_id):
+    workspace = get_object_or_404(Workspace, id=workspace_id)
+    task      = get_object_or_404(Task, id=task_id, workspace=workspace)
+    if not _is_member(workspace, request.user):
+        return JsonResponse({"error": "Not a member"}, status=403)
+    ts = _get_or_create_settings(workspace)
+    if not _check_perm(ts, "who_can_delete_tasks", workspace, request.user):
+        return JsonResponse({"error": "You don't have permission to delete tasks."}, status=403)
+    task.delete()
+    _broadcast_taskboard_event(workspace.id, {
+        "action": "delete",
+        "object": "task",
+        "task_id": task_id,
+    })
+    _notify_workspace_users(
+        workspace, request.user, 'taskboard', 'task_delete',
+        f"{request.user.display_name or request.user.username} deleted a task",
+        reference_id=task_id,
+    )
+    return JsonResponse({"success": True})
+ 
+ 
+# ─── attachments ──────────────────────────────────────────────────────────────
+ 
+@login_required
+@require_POST
+def task_attachment_upload(request, workspace_id, task_id):
+    workspace = get_object_or_404(Workspace, id=workspace_id)
+    task      = get_object_or_404(Task, id=task_id, workspace=workspace)
+    if not _is_member(workspace, request.user):
+        return JsonResponse({"error": "Not a member"}, status=403)
+    ts = _get_or_create_settings(workspace)
+    if not ts.allow_attachments:
+        return JsonResponse({"error": "Attachments are disabled for this board."}, status=403)
+    if not _check_perm(ts, "who_can_attach_files", workspace, request.user):
+        return JsonResponse({"error": "You don't have permission to attach files."}, status=403)
+ 
+    att_type = request.POST.get("type", "document")
+ 
+    if att_type == "link":
+        url = request.POST.get("url", "").strip()
+        if not url:
+            return JsonResponse({"error": "URL is required"}, status=400)
+        current_links = task.attachments.filter(attachment_type="link").count()
+        if current_links >= TaskAttachment.LINK_COUNT_MAX:
+            return JsonResponse({"error": "Each task can have at most 5 links."}, status=400)
+        att = TaskAttachment.objects.create(
+            task=task, uploaded_by=request.user,
+            attachment_type="link", link_url=url, original_name=url,
+        )
+        return JsonResponse({"success": True, "attachment": {
+            "id": att.id, "type": "link", "original_name": att.original_name,
+            "link_url": att.link_url, "url": None, "file_size": 0,
+            "uploaded_by": request.user.display_name or request.user.username,
+            "created_at": att.created_at.isoformat(),
+        }})
+ 
+    file = request.FILES.get("file")
+    if not file:
+        return JsonResponse({"error": "No file provided"}, status=400)
+ 
+    current_count = task.attachments.filter(attachment_type=att_type).count()
+    if att_type == "image" and current_count >= TaskAttachment.IMAGE_COUNT_MAX:
+        return JsonResponse({"error": "Each task can have at most 10 images."}, status=400)
+    if att_type == "video" and current_count >= TaskAttachment.VIDEO_COUNT_MAX:
+        return JsonResponse({"error": "Each task can have at most 5 videos."}, status=400)
+    if att_type == "document" and current_count >= TaskAttachment.DOC_COUNT_MAX:
+        return JsonResponse({"error": "Each task can have at most 5 documents."}, status=400)
+
+    LIMITS = {
+        "image":    TaskAttachment.IMAGE_MAX,
+        "video":    TaskAttachment.VIDEO_MAX,
+        "document": TaskAttachment.DOC_MAX,
+    }
+    limit = LIMITS.get(att_type, TaskAttachment.DOC_MAX)
+    if file.size > limit:
+        limit_mb = limit / (1024 * 1024)
+        return JsonResponse(
+            {"error": f"{att_type.title()} must be under {limit_mb:.0f} MB "
+                      f"(your file is {file.size/(1024*1024):.1f} MB)"},
+            status=400
+        )
+ 
+    att = TaskAttachment.objects.create(
+        task=task, uploaded_by=request.user,
+        attachment_type=att_type, file=file,
+        original_name=file.name, file_size=file.size,
+    )
+    return JsonResponse({"success": True, "attachment": {
+        "id": att.id, "type": att.attachment_type,
+        "original_name": att.original_name, "file_size": att.file_size,
+        "link_url": "", "url": att.file.url,
+        "uploaded_by": request.user.display_name or request.user.username,
+        "created_at": att.created_at.isoformat(),
+    }})
+ 
+ 
+@login_required
+@require_POST
+def task_attachment_delete(request, workspace_id, task_id, att_id):
+    workspace = get_object_or_404(Workspace, id=workspace_id)
+    att       = get_object_or_404(TaskAttachment, id=att_id, task_id=task_id)
+    if not _is_member(workspace, request.user):
+        return JsonResponse({"error": "Not a member"}, status=403)
+    # Only uploader or workspace admin may delete
+    if att.uploaded_by_id != request.user.id and not _is_admin(workspace, request.user):
+        return JsonResponse({"error": "Permission denied."}, status=403)
+    if att.file:
+        try: att.file.delete(save=False)
+        except Exception: pass
+    att.delete()
+    return JsonResponse({"success": True})
+ 
+ 
+# ─── comments ─────────────────────────────────────────────────────────────────
+ 
+@login_required
+@require_POST
+def task_comment_create(request, workspace_id, task_id):
+    workspace = get_object_or_404(Workspace, id=workspace_id)
+    task      = get_object_or_404(Task, id=task_id, workspace=workspace)
+    if not _is_member(workspace, request.user):
+        return JsonResponse({"error": "Not a member"}, status=403)
+    ts = _get_or_create_settings(workspace)
+    if not ts.allow_comments:
+        return JsonResponse({"error": "Comments are disabled for this board."}, status=403)
+    if not _check_perm(ts, "who_can_comment", workspace, request.user):
+        return JsonResponse({"error": "You don't have permission to comment."}, status=403)
+ 
+    try:
+        body = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+ 
+    text = body.get("text", "").strip()
+    if not text:
+        return JsonResponse({"error": "Comment cannot be empty."}, status=400)
+ 
+    c = TaskComment.objects.create(task=task, author=request.user, text=text)
+    comment_payload = {
+        "id": c.id,
+        "author": c.author.display_name or c.author.username,
+        "author_avatar": c.author.profile_picture.url if c.author.profile_picture else None,
+        "text": c.text,
+        "created_at": c.created_at.isoformat(),
+    }
+    _broadcast_taskboard_event(workspace.id, {
+        "action": "create",
+        "object": "comment",
+        "task_id": task.id,
+        "comment": comment_payload,
+    })
+    _notify_workspace_users(
+        workspace, request.user, 'taskboard', 'task_comment',
+        f"{request.user.display_name or request.user.username} commented on {task.title}",
+        reference_id=task.id,
+    )
+    return JsonResponse({"success": True, "comment": comment_payload}, status=201)
+ 

@@ -1,129 +1,325 @@
+{% extends "base_layout.html" %}
 {% load static %}
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Task Board – KollabHub</title>
-  <!-- newwork -->
-    <link rel="stylesheet" href="{% static 'css/taskboard.css' %}">
-</head>
-<body>
+
+{% block title %}Task Board – KollabHub{% endblock %}
+
+{% block extra_css %}
+  <link rel="stylesheet" href="{% static 'css/taskboard.css' %}"/>
+{% endblock %}
+
+{% block nav_tasks %}active{% endblock %}
+
+{% block main_content %}
 
 <!-- ══════════ BOARD HEADER ══════════ -->
-<header class="board-header">
+<header class="board-header"
+        data-workspace-id="{{ workspace.id }}"
+        data-workspace-title="{{ workspace.title }}"
+        data-workspace-visibility="{{ workspace.visibility }}"
+        data-is-admin="{% if is_admin %}true{% else %}false{% endif %}"
+        data-perm-create-tasks="{% if perms.can_create_tasks %}true{% else %}false{% endif %}"
+        data-perm-edit-tasks="{% if perms.can_edit_tasks %}true{% else %}false{% endif %}"
+        data-perm-delete-tasks="{% if perms.can_delete_tasks %}true{% else %}false{% endif %}"
+        data-perm-move-tasks="{% if perms.can_move_tasks %}true{% else %}false{% endif %}"
+        data-perm-create-lists="{% if perms.can_create_lists %}true{% else %}false{% endif %}"
+        data-perm-edit-lists="{% if perms.can_edit_lists %}true{% else %}false{% endif %}"
+        data-perm-delete-lists="{% if perms.can_delete_lists %}true{% else %}false{% endif %}"
+        data-perm-attach="{% if perms.can_attach_files %}true{% else %}false{% endif %}"
+        data-perm-comment="{% if perms.can_comment %}true{% else %}false{% endif %}"
+        data-feat-priorities="{% if ts.allow_task_priorities %}true{% else %}false{% endif %}"
+        data-feat-assignees="{% if ts.allow_task_assignees %}true{% else %}false{% endif %}"
+        data-feat-attachments="{% if ts.allow_attachments %}true{% else %}false{% endif %}"
+        data-feat-comments="{% if ts.allow_comments %}true{% else %}false{% endif %}"
+        data-feat-desc="{% if ts.allow_task_desc %}true{% else %}false{% endif %}">
+
   <div class="board-header-left">
-    <a href="{% url 'chatui' workspace.id %}" class="back-link">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
-    </a>
     <div class="board-title-wrap">
       <h1 class="board-title">Task Board</h1>
-      <span class="board-subtitle">Product Design · Sprint 4</span>
+      <span class="board-subtitle">{{ workspace.title }}</span>
     </div>
   </div>
+
   <div class="board-header-right">
-    <!-- Search + Filter -->
+    <!-- Filter bar -->
     <div class="filter-bar">
       <div class="search-wrap">
         <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
         <input type="text" id="searchInput" class="search-input" placeholder="Search tasks…"/>
       </div>
-
-      <!-- Filter icon button + dropdown -->
       <div class="filter-dropdown-wrap" id="filterDropdownWrap">
-        <button class="filter-icon-btn" id="filterIconBtn" title="Filter tasks">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
-          </svg>
+        <button class="filter-icon-btn" id="filterIconBtn" title="Filter">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
           <span class="filter-btn-label">Filter</span>
           <span class="filter-active-dot" id="filterActiveDot"></span>
         </button>
-
-        <!-- Dropdown panel -->
         <div class="filter-dropdown" id="filterDropdown">
           <div class="filter-dropdown-header">
             <span class="filter-dropdown-title">Filter Tasks</span>
             <button class="filter-clear-btn" id="filterClearBtn">Clear all</button>
           </div>
-
           <div class="filter-section">
             <p class="filter-section-label">Priority</p>
             <div class="filter-option-list">
-              <button class="filter-opt" data-filter="all">
-                <!-- PRIORITY -->
-                <span class="filter-opt-icon all-icon">☰</span>
-                All Tasks
-                <span class="filter-opt-check" id="check-all">✓</span>
-              </button>
-              <button class="filter-opt" data-filter="high">
-                <span class="filter-opt-dot" style="background:#f87171"></span>
-                High
-                <span class="filter-opt-check" id="check-high"></span>
-              </button>
-              <button class="filter-opt" data-filter="medium">
-                <span class="filter-opt-dot" style="background:#facc15"></span>
-                Medium
-                <span class="filter-opt-check" id="check-medium"></span>
-              </button>
-              <button class="filter-opt" data-filter="low">
-                <span class="filter-opt-dot" style="background:#4ade80"></span>
-                Low
-                <span class="filter-opt-check" id="check-low"></span>
-              </button>
+              <button class="filter-opt active" data-filter="all"><span class="filter-opt-icon all-icon">☰</span>All Tasks<span class="filter-opt-check" id="check-all">✓</span></button>
+              <button class="filter-opt" data-filter="high"><span class="filter-opt-dot" style="background:#f87171"></span>High<span class="filter-opt-check" id="check-high"></span></button>
+              <button class="filter-opt" data-filter="medium"><span class="filter-opt-dot" style="background:#facc15"></span>Medium<span class="filter-opt-check" id="check-medium"></span></button>
+              <button class="filter-opt" data-filter="low"><span class="filter-opt-dot" style="background:#4ade80"></span>Low<span class="filter-opt-check" id="check-low"></span></button>
             </div>
           </div>
-                <!-- STATUS -->
           <div class="filter-divider"></div>
-
           <div class="filter-section">
             <p class="filter-section-label">Status</p>
             <div class="filter-option-list">
-              <button class="filter-opt" data-filter="complete">
-                <span class="filter-opt-icon complete-icon">✓</span>
-                Complete
-                <span class="filter-opt-check" id="check-complete"></span>
-              </button>
-              <button class="filter-opt" data-filter="incomplete">
-                <span class="filter-opt-icon incomplete-icon">○</span>
-                Incomplete
-                <span class="filter-opt-check" id="check-incomplete"></span>
-              </button>
+              <button class="filter-opt" data-filter="complete"><span class="filter-opt-icon complete-icon">✓</span>Complete<span class="filter-opt-check" id="check-complete"></span></button>
+              <button class="filter-opt" data-filter="incomplete"><span class="filter-opt-icon incomplete-icon">○</span>Incomplete<span class="filter-opt-check" id="check-incomplete"></span></button>
             </div>
           </div>
-                <!-- ASSIGNEE -->
           <div class="filter-divider"></div>
-
           <div class="filter-section">
             <p class="filter-section-label">Assignee</p>
-            <div class="filter-option-list" id="assigneeFilterList">
-              <!-- Injected by JS -->
-            </div>
+            <div class="filter-option-list" id="assigneeFilterList"></div>
           </div>
         </div>
       </div>
     </div>
+
+    <!-- Add Task (shown only if permitted) -->
+    {% if perms.can_create_tasks %}
     <button class="btn-accent" id="addTaskBtn">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
       Add Task
     </button>
+    {% endif %}
+
+    <!-- Settings gear (admin only) -->
+    {% if is_admin %}
+    <button class="board-settings-btn" id="boardSettingsBtn" title="Board Settings">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93A10 10 0 1 0 4.93 19.07 10 10 0 0 0 19.07 4.93z"/></svg>
+    </button>
+    {% endif %}
   </div>
 </header>
 
 <!-- ══════════ KANBAN BOARD ══════════ -->
 <div class="board-wrap">
-  <div class="kanban" id="kanban">
-    <!-- Columns injected by tasks.js -->
+  <div class="kanban" id="kanban"></div>
+</div>
+
+<!-- Django-injected member data for JS -->
+<script id="workspaceMembersData" type="application/json">
+[{% for m in members %}{"id":{{ m.user.id }},"display":"{{ m.user.display_name|default:m.user.username|escapejs }}","username":"{{ m.user.username|escapejs }}"}{% if not forloop.last %},{% endif %}{% endfor %}]
+</script>
+
+{% endblock %}
+
+
+{% block page_modals %}
+
+<!-- ══════ BOARD SETTINGS MODAL ══════ -->
+<div class="overlay" id="boardSettingsOverlay">
+  <div class="modal modal-lg board-settings-modal" role="dialog" aria-modal="true">
+    <div class="modal-header">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93A10 10 0 1 0 4.93 19.07 10 10 0 0 0 19.07 4.93z"/></svg>
+        <h2>Board Settings</h2>
+      </div>
+      <button class="icon-close" id="boardSettingsCloseBtn">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+
+    <div class="bset-body">
+
+      <!-- LEFT NAV -->
+      <nav class="bset-nav">
+        <button class="bset-nav-item active" data-tab="permissions">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          Permissions
+        </button>
+        <button class="bset-nav-item" data-tab="features">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+          Features
+        </button>
+        <button class="bset-nav-item" data-tab="limits">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+          Limits
+        </button>
+        <button class="bset-nav-item" data-tab="notifications">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+          Notifications
+        </button>
+      </nav>
+
+      <!-- PANELS -->
+      <div class="bset-panels">
+
+        <!-- Permissions -->
+        <div class="bset-panel active" id="bset-tab-permissions">
+          <p class="bset-panel-desc">Control who can perform each action. Admins always have full access regardless of these settings.</p>
+
+          <div class="bset-section-title">Tasks</div>
+          <div class="bset-rows">
+            <div class="bset-row">
+              <div class="bset-row-info"><p class="bset-row-label">Create tasks</p><p class="bset-row-hint">Who can add new tasks to the board</p></div>
+              <select class="bset-select" data-field="who_can_create_tasks">
+                <option value="all_members">All Members</option>
+                <option value="admin_only">Admins Only</option>
+              </select>
+            </div>
+            <div class="bset-row">
+              <div class="bset-row-info"><p class="bset-row-label">Edit tasks</p><p class="bset-row-hint">Who can change title, description, priority and assignee</p></div>
+              <select class="bset-select" data-field="who_can_edit_tasks">
+                <option value="all_members">All Members</option>
+                <option value="admin_only">Admins Only</option>
+              </select>
+            </div>
+            <div class="bset-row">
+              <div class="bset-row-info"><p class="bset-row-label">Delete tasks</p><p class="bset-row-hint">Who can permanently remove tasks</p></div>
+              <select class="bset-select" data-field="who_can_delete_tasks">
+                <option value="all_members">All Members</option>
+                <option value="admin_only">Admins Only</option>
+              </select>
+            </div>
+            <div class="bset-row">
+              <div class="bset-row-info"><p class="bset-row-label">Move tasks</p><p class="bset-row-hint">Who can drag or change a task's list / mark complete</p></div>
+              <select class="bset-select" data-field="who_can_move_tasks">
+                <option value="all_members">All Members</option>
+                <option value="admin_only">Admins Only</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="bset-section-title" style="margin-top:20px;">Lists</div>
+          <div class="bset-rows">
+            <div class="bset-row">
+              <div class="bset-row-info"><p class="bset-row-label">Create lists</p><p class="bset-row-hint">Who can add new columns to the board</p></div>
+              <select class="bset-select" data-field="who_can_create_lists">
+                <option value="all_members">All Members</option>
+                <option value="admin_only">Admins Only</option>
+              </select>
+            </div>
+            <div class="bset-row">
+              <div class="bset-row-info"><p class="bset-row-label">Edit lists</p><p class="bset-row-hint">Who can rename lists or change their colour</p></div>
+              <select class="bset-select" data-field="who_can_edit_lists">
+                <option value="all_members">All Members</option>
+                <option value="admin_only">Admins Only</option>
+              </select>
+            </div>
+            <div class="bset-row">
+              <div class="bset-row-info"><p class="bset-row-label">Delete lists</p><p class="bset-row-hint">Who can remove custom lists (default lists are always protected)</p></div>
+              <select class="bset-select" data-field="who_can_delete_lists">
+                <option value="all_members">All Members</option>
+                <option value="admin_only">Admins Only</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="bset-section-title" style="margin-top:20px;">Content</div>
+          <div class="bset-rows">
+            <div class="bset-row">
+              <div class="bset-row-info"><p class="bset-row-label">Attach files</p><p class="bset-row-hint">Who can upload images, videos, documents or links</p></div>
+              <select class="bset-select" data-field="who_can_attach_files">
+                <option value="all_members">All Members</option>
+                <option value="admin_only">Admins Only</option>
+              </select>
+            </div>
+            <div class="bset-row">
+              <div class="bset-row-info"><p class="bset-row-label">Post comments</p><p class="bset-row-hint">Who can add activity comments to tasks</p></div>
+              <select class="bset-select" data-field="who_can_comment">
+                <option value="all_members">All Members</option>
+                <option value="admin_only">Admins Only</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Features -->
+        <div class="bset-panel" id="bset-tab-features">
+          <p class="bset-panel-desc">Toggle board features on or off for this workspace. Disabled features are hidden from all members.</p>
+          <div class="bset-rows">
+            <div class="bset-row">
+              <div class="bset-row-info"><p class="bset-row-label">Task priorities</p><p class="bset-row-hint">Show Low / Medium / High labels on tasks</p></div>
+              <button class="bset-toggle" data-field="allow_task_priorities"><span class="bset-toggle-knob"></span></button>
+            </div>
+            <div class="bset-row">
+              <div class="bset-row-info"><p class="bset-row-label">Task assignees</p><p class="bset-row-hint">Allow tasks to be assigned to workspace members</p></div>
+              <button class="bset-toggle" data-field="allow_task_assignees"><span class="bset-toggle-knob"></span></button>
+            </div>
+            <div class="bset-row">
+              <div class="bset-row-info"><p class="bset-row-label">Task descriptions</p><p class="bset-row-hint">Show the description field inside task cards</p></div>
+              <button class="bset-toggle" data-field="allow_task_desc"><span class="bset-toggle-knob"></span></button>
+            </div>
+            <div class="bset-row">
+              <div class="bset-row-info"><p class="bset-row-label">File attachments</p><p class="bset-row-hint">Allow files and links to be attached to tasks</p></div>
+              <button class="bset-toggle" data-field="allow_attachments"><span class="bset-toggle-knob"></span></button>
+            </div>
+            <div class="bset-row">
+              <div class="bset-row-info"><p class="bset-row-label">Comments & activity</p><p class="bset-row-hint">Show the activity / comment section on tasks</p></div>
+              <button class="bset-toggle" data-field="allow_comments"><span class="bset-toggle-knob"></span></button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Limits -->
+        <div class="bset-panel" id="bset-tab-limits">
+          <p class="bset-panel-desc">Set hard limits on board capacity. Enter 0 to allow unlimited.</p>
+          <div class="bset-rows">
+            <div class="bset-row">
+              <div class="bset-row-info"><p class="bset-row-label">Max lists</p><p class="bset-row-hint">Maximum number of lists on this board (0 = unlimited)</p></div>
+              <input type="number" min="0" max="50" class="bset-number" data-field="max_lists" placeholder="0"/>
+            </div>
+            <div class="bset-row">
+              <div class="bset-row-info"><p class="bset-row-label">Max tasks per list</p><p class="bset-row-hint">Maximum tasks in a single list (0 = unlimited)</p></div>
+              <input type="number" min="0" max="500" class="bset-number" data-field="max_tasks_per_list" placeholder="0"/>
+            </div>
+          </div>
+          <p class="bset-panel-desc" style="margin-top:18px;font-size:.75rem;">
+            File size limits are fixed at system level: Image ≤ 1 MB · Video ≤ 25 MB · Document ≤ 20 MB. Each task may include up to 10 images, 5 videos, 5 documents, and 5 links.
+          </p>
+        </div>
+
+        <!-- Notifications -->
+        <div class="bset-panel" id="bset-tab-notifications">
+          <p class="bset-panel-desc">Choose which board events trigger notifications. (Notifications are delivered via the platform's notification layer.)</p>
+          <div class="bset-rows">
+            <div class="bset-row">
+              <div class="bset-row-info"><p class="bset-row-label">Task created</p><p class="bset-row-hint">Notify members when a new task is added</p></div>
+              <button class="bset-toggle" data-field="notify_on_task_create"><span class="bset-toggle-knob"></span></button>
+            </div>
+            <div class="bset-row">
+              <div class="bset-row-info"><p class="bset-row-label">Task completed</p><p class="bset-row-hint">Notify members when a task is marked done</p></div>
+              <button class="bset-toggle" data-field="notify_on_task_done"><span class="bset-toggle-knob"></span></button>
+            </div>
+            <div class="bset-row">
+              <div class="bset-row-info"><p class="bset-row-label">New comment</p><p class="bset-row-hint">Notify task participants when a comment is posted</p></div>
+              <button class="bset-toggle" data-field="notify_on_comment"><span class="bset-toggle-knob"></span></button>
+            </div>
+            <div class="bset-row">
+              <div class="bset-row-info"><p class="bset-row-label">Task assigned</p><p class="bset-row-hint">Notify a member when they are assigned to a task</p></div>
+              <button class="bset-toggle" data-field="notify_on_assign"><span class="bset-toggle-knob"></span></button>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /bset-panels -->
+    </div><!-- /bset-body -->
+
+    <div class="bset-footer">
+      <span class="bset-last-saved" id="bsetLastSaved"></span>
+      <div style="display:flex;gap:8px;">
+        <button class="btn-cancel" id="boardSettingsCancelBtn">Cancel</button>
+        <button class="btn-primary" id="boardSettingsSaveBtn">Save Settings</button>
+      </div>
+    </div>
   </div>
 </div>
 
-<!-- ══════════ ADD / EDIT COLUMN MODAL ══════════ -->
+<!-- ══════ ADD / EDIT COLUMN MODAL ══════ -->
 <div class="overlay" id="colOverlay">
   <div class="modal modal-sm">
     <div class="modal-header">
       <h2 id="colModalTitle">Add New List</h2>
-      <button class="icon-close" id="colCloseBtn">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-      </button>
+      <button class="icon-close" id="colCloseBtn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
     </div>
     <div class="form-card">
       <div class="form-group">
@@ -152,14 +348,12 @@
   </div>
 </div>
 
-<!-- ══════════ ADD TASK MODAL ══════════ -->
+<!-- ══════ ADD TASK MODAL ══════ -->
 <div class="overlay" id="addTaskOverlay">
   <div class="modal modal-sm">
     <div class="modal-header">
       <h2>Add Task</h2>
-      <button class="icon-close" id="addTaskCloseBtn">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-      </button>
+      <button class="icon-close" id="addTaskCloseBtn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
     </div>
     <div class="form-card">
       <div class="form-group">
@@ -167,32 +361,21 @@
         <input type="text" id="newTaskTitle" placeholder="e.g. Design new onboarding flow"/>
         <span class="field-error" id="newTaskTitleErr"></span>
       </div>
-      <div class="form-group" style="margin-top:14px;">
+      <div class="form-group" style="margin-top:14px;" id="newTaskDescGroup">
         <label for="newTaskDesc">Description</label>
         <textarea id="newTaskDesc" class="textarea" placeholder="Add details, context, or notes…" rows="3"></textarea>
       </div>
       <div class="form-row" style="margin-top:14px;">
-        <div class="form-group">
+        <div class="form-group" id="newTaskAssigneeGroup">
           <label for="newTaskAssignee">Assignee</label>
-          <div class="select-wrap">
-            <select id="newTaskAssignee" class="select">
-              <option>Alex Morgan</option>
-              <option>Sarah Chen</option>
-              <option>David Kim</option>
-              <option>Mia Torres</option>
-            </select>
-          </div>
+          <div class="select-wrap"><select id="newTaskAssignee" class="select"></select></div>
         </div>
         <div class="form-group">
           <label for="newTaskCol">List</label>
-          <div class="select-wrap">
-            <select id="newTaskCol" class="select" id="newTaskCol">
-              <!-- Options injected by JS -->
-            </select>
-          </div>
+          <div class="select-wrap"><select id="newTaskCol" class="select"></select></div>
         </div>
       </div>
-      <div class="form-group" style="margin-top:14px;">
+      <div class="form-group" style="margin-top:14px;" id="newTaskPriorityGroup">
         <label>Priority</label>
         <div class="priority-opts">
           <button class="priority-opt" data-p="low">Low</button>
@@ -208,89 +391,70 @@
   </div>
 </div>
 
-<!-- ══════════ TASK DETAIL MODAL ══════════ -->
+<!-- ══════ TASK DETAIL MODAL ══════ -->
 <div class="overlay" id="taskDetailOverlay">
   <div class="modal modal-lg">
     <div class="task-detail-layout">
-
-      <!-- LEFT: main content -->
       <div class="task-detail-main">
         <div class="task-detail-top">
           <div class="task-detail-meta-row">
             <span class="task-detail-col-label" id="detailColLabel"></span>
             <span class="task-priority-badge" id="detailPriority"></span>
           </div>
-          <button class="icon-close" id="taskDetailCloseBtn">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-          </button>
+          <button class="icon-close" id="taskDetailCloseBtn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
         </div>
-
-        <!-- Title (editable) -->
         <div class="detail-title-wrap">
           <button class="complete-toggle" id="detailCompleteBtn" title="Toggle complete">
             <svg id="completeCheckIcon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/></svg>
           </button>
-          <h2 class="detail-title" id="detailTitle" contenteditable="true" spellcheck="false"></h2>
+          <h2 class="detail-title" id="detailTitle" contenteditable="false" spellcheck="false"></h2>
         </div>
-
-        <!-- Description -->
-        <div class="detail-section">
-          <div class="detail-section-label">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-            Description
-          </div>
-          <textarea class="detail-desc" id="detailDesc" placeholder="Add a description…" rows="4"></textarea>
+        <div class="detail-section" id="detailDescSection">
+          <div class="detail-section-label"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg> Description</div>
+          <textarea class="detail-desc" id="detailDesc" placeholder="Add a description…" rows="4" disabled></textarea>
         </div>
-
-        <!-- Attachments -->
-        <div class="detail-section">
-          <div class="detail-section-label">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
-            Attachments
-          </div>
+        <div class="detail-section" id="detailAttachSection">
+          <div class="detail-section-label"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg> Attachments</div>
           <div class="attachment-list" id="attachmentList"></div>
-          <label class="attach-upload-btn">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            Attach File
-            <input type="file" id="fileInput" multiple style="display:none;"/>
-          </label>
-        </div>
-
-        <!-- Activity / Comments -->
-        <div class="detail-section">
-          <div class="detail-section-label">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-            Activity
+          <div class="attach-type-bar" id="attachTypeBar">
+            <button class="attach-type-btn" data-type="image" title="Image (max 1 MB)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>Image</button>
+            <button class="attach-type-btn" data-type="video" title="Video (max 25 MB)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>Video</button>
+            <button class="attach-type-btn" data-type="document" title="Document (max 10 MB)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Document</button>
+            <button class="attach-type-btn" data-type="link"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>Link</button>
           </div>
+          <input type="file" id="fileInputImage"    accept="image/*"      style="display:none"/>
+          <input type="file" id="fileInputVideo"    accept="video/*"      style="display:none"/>
+          <input type="file" id="fileInputDocument" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip" style="display:none"/>
+          <div class="attach-link-row" id="attachLinkRow" style="display:none;">
+            <input type="url" id="attachLinkInput" class="chat-input" placeholder="https://…" style="flex:1;font-size:.83rem;"/>
+            <button class="btn-accent-sm" id="attachLinkSubmit">Add</button>
+            <button class="btn-cancel-sm" id="attachLinkCancel">✕</button>
+          </div>
+          <p class="attach-limits-hint">Image ≤ 1 MB · Video ≤ 25 MB · Document ≤ 20 MB · Max 10 images · 5 videos · 5 documents · 5 links</p>
+        </div>
+        <div class="detail-section" id="detailCommentSection">
+          <div class="detail-section-label"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> Activity</div>
           <div class="comment-list" id="commentList"></div>
-          <div class="comment-input-wrap">
+          <div class="comment-input-wrap" id="commentInputWrap">
             <div class="comment-av" id="commentAv">A</div>
             <div class="comment-input-box">
               <input type="text" id="commentInput" class="comment-input" placeholder="Write a comment…"/>
-              <button class="comment-send" id="commentSend">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>
-              </button>
+              <button class="comment-send" id="commentSend"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg></button>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- RIGHT: sidebar meta -->
+      <!-- RIGHT sidebar -->
       <div class="task-detail-sidebar">
-        <div class="sidebar-section-block">
+        <div class="sidebar-section-block" id="detailAssigneeBlock">
           <p class="sidebar-meta-label">Assignee</p>
           <div class="sidebar-assignee" id="detailAssigneeWrap">
             <div class="sidebar-av" id="detailAssigneeAv"></div>
-            <select id="detailAssignee" class="select select-sm">
-              <option>Alex Morgan</option>
-              <option>Sarah Chen</option>
-              <option>David Kim</option>
-              <option>Mia Torres</option>
-            </select>
+            <select id="detailAssignee" class="select select-sm" disabled></select>
           </div>
         </div>
-
-        <div class="sidebar-section-block">
+        <div class="sidebar-section-block" id="detailPriorityBlock">
           <p class="sidebar-meta-label">Priority</p>
           <div class="priority-opts-sm" id="detailPriorityOpts">
             <button class="priority-chip" data-p="low">Low</button>
@@ -298,41 +462,39 @@
             <button class="priority-chip" data-p="high">High</button>
           </div>
         </div>
-
         <div class="sidebar-section-block">
           <p class="sidebar-meta-label">List</p>
-          <div class="select-wrap">
-            <select id="detailCol" class="select select-sm"></select>
-          </div>
+          <div class="select-wrap"><select id="detailCol" class="select select-sm"></select></div>
         </div>
-
         <div class="sidebar-section-block">
           <p class="sidebar-meta-label">Status</p>
           <div class="detail-status" id="detailStatus"></div>
         </div>
-
         <div class="sidebar-section-block">
           <p class="sidebar-meta-label">Created</p>
           <p class="sidebar-meta-value" id="detailCreated"></p>
         </div>
-
-        <!-- Actions -->
         <div class="sidebar-actions">
           <button class="sidebar-action-btn complete-action" id="sidebarCompleteBtn">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
             <span id="sidebarCompleteBtnLabel">Mark Complete</span>
           </button>
-          <button class="sidebar-action-btn delete-action" id="detailDeleteBtn">
+          <button class="sidebar-action-btn save-action" id="detailSaveBtn">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+            Save Changes
+          </button>
+          <button class="sidebar-action-btn delete-action" id="detailDeleteBtn" style="display:none">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
             Delete Task
           </button>
         </div>
       </div>
-
     </div>
   </div>
 </div>
 
+{% endblock %}
+
+{% block extra_js %}
 <script src="{% static 'js/taskboard.js' %}"></script>
-</body>
-</html>
+{% endblock %}

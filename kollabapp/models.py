@@ -175,3 +175,198 @@ class WorkspaceInvite(models.Model):
     expires_at = models.DateTimeField(null=True, blank=True)
 
     is_active = models.BooleanField(default=True)
+
+
+   
+# ------------------------------- Taskboard -----------------------------------
+
+class TaskList(models.Model):
+    """A column/list on the taskboard. Each workspace has 4 defaults + user-added ones."""
+    workspace  = models.ForeignKey("Workspace", on_delete=models.CASCADE, related_name="task_lists")
+    name       = models.CharField(max_length=100)
+    color      = models.CharField(max_length=20, default="#60a5fa")
+    position   = models.PositiveIntegerField(default=0)   # for ordering
+    is_default = models.BooleanField(default=False)        # default 4 cannot be deleted
+ 
+    class Meta:
+        ordering = ["position", "id"]
+ 
+    def __str__(self):
+        return f"{self.name} ({self.workspace.title})"
+ 
+ 
+class Task(models.Model):
+    PRIORITY_CHOICES = (
+        ("low",    "Low"),
+        ("medium", "Medium"),
+        ("high",   "High"),
+    )
+ 
+    workspace   = models.ForeignKey("Workspace", on_delete=models.CASCADE, related_name="tasks")
+    task_list   = models.ForeignKey("TaskList",  on_delete=models.CASCADE, related_name="tasks",
+                                    null=True, blank=True)
+    title       = models.CharField(max_length=255)
+    description = models.TextField(blank=True, default="")
+    priority    = models.CharField(max_length=10, choices=PRIORITY_CHOICES, default="medium")
+    assignee    = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="assigned_tasks"
+    )
+    complete    = models.BooleanField(default=False)
+    created_by  = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="created_tasks"
+    )
+    created_at  = models.DateTimeField(auto_now_add=True)
+    updated_at  = models.DateTimeField(auto_now=True)
+ 
+    class Meta:
+        ordering = ["created_at"]
+ 
+    def __str__(self):
+        return f"{self.title} — {self.workspace.title}"
+ 
+ 
+class TaskAttachment(models.Model):
+    ATTACHMENT_TYPES = (
+        ("image",    "Image"),
+        ("video",    "Video"),
+        ("document", "Document"),
+        ("link",     "Link"),
+    )
+ 
+    # Limits (bytes)
+    IMAGE_MAX    = 1  * 1024 * 1024   #  1 MB
+    VIDEO_MAX    = 25 * 1024 * 1024   # 25 MB
+    DOC_MAX      = 20 * 1024 * 1024   # 20 MB
+
+    IMAGE_COUNT_MAX    = 10
+    VIDEO_COUNT_MAX    = 5
+    DOC_COUNT_MAX      = 5
+    LINK_COUNT_MAX     = 5
+ 
+    task          = models.ForeignKey("Task", on_delete=models.CASCADE, related_name="attachments")
+    uploaded_by   = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+                                      null=True, related_name="task_attachments")
+    attachment_type = models.CharField(max_length=10, choices=ATTACHMENT_TYPES)
+    file          = models.FileField(upload_to="task_attachments/", null=True, blank=True)
+    link_url      = models.URLField(max_length=500, blank=True, default="")
+    original_name = models.CharField(max_length=255, blank=True, default="")
+    file_size     = models.PositiveIntegerField(default=0)    # bytes
+    created_at    = models.DateTimeField(auto_now_add=True)
+ 
+    class Meta:
+        ordering = ["created_at"]
+ 
+    def __str__(self):
+        return f"{self.attachment_type}: {self.original_name or self.link_url}"
+ 
+ 
+class TaskComment(models.Model):
+    task       = models.ForeignKey("Task", on_delete=models.CASCADE, related_name="comments")
+    author     = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+                                   related_name="task_comments")
+    text       = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+ 
+    class Meta:
+        ordering = ["created_at"]
+ 
+    def __str__(self):
+        return f"{self.author.username}: {self.text[:40]}"
+
+
+# task settings ----------------
+
+class TaskboardSettings(models.Model):
+    """
+    Per-workspace taskboard configuration.
+    One record per workspace (created automatically on first access).
+    """
+ 
+    # Who can create / edit / delete tasks
+    PERM_CHOICES = (
+        ("all_members", "All Members"),
+        ("admin_only",  "Admins Only"),
+    )
+ 
+    workspace = models.OneToOneField(
+        "Workspace", on_delete=models.CASCADE, related_name="taskboard_settings"
+    )
+ 
+    # ── Task permissions ─────────────────────────────────────────────────────
+    who_can_create_tasks  = models.CharField(max_length=20, choices=PERM_CHOICES, default="all_members")
+    who_can_edit_tasks    = models.CharField(max_length=20, choices=PERM_CHOICES, default="all_members")
+    who_can_delete_tasks  = models.CharField(max_length=20, choices=PERM_CHOICES, default="admin_only")
+    who_can_move_tasks    = models.CharField(max_length=20, choices=PERM_CHOICES, default="all_members")
+ 
+    # ── List permissions ─────────────────────────────────────────────────────
+    who_can_create_lists  = models.CharField(max_length=20, choices=PERM_CHOICES, default="all_members")
+    who_can_edit_lists    = models.CharField(max_length=20, choices=PERM_CHOICES, default="all_members")
+    who_can_delete_lists  = models.CharField(max_length=20, choices=PERM_CHOICES, default="admin_only")
+ 
+    # ── Attachment / comment permissions ─────────────────────────────────────
+    who_can_attach_files  = models.CharField(max_length=20, choices=PERM_CHOICES, default="all_members")
+    who_can_comment       = models.CharField(max_length=20, choices=PERM_CHOICES, default="all_members")
+ 
+    # ── Board behaviour ──────────────────────────────────────────────────────
+    allow_due_dates       = models.BooleanField(default=True)
+    allow_task_priorities = models.BooleanField(default=True)
+    allow_task_assignees  = models.BooleanField(default=True)
+    allow_attachments     = models.BooleanField(default=True)
+    allow_comments        = models.BooleanField(default=True)
+    allow_task_desc       = models.BooleanField(default=True)
+ 
+    # ── Notifications (stored, consumed by future email/push layer) ───────────
+    notify_on_task_create  = models.BooleanField(default=True)
+    notify_on_task_done    = models.BooleanField(default=True)
+    notify_on_comment      = models.BooleanField(default=True)
+    notify_on_assign       = models.BooleanField(default=True)
+ 
+    # ── Limits ──────────────────────────────────────────────────────────────
+    max_tasks_per_list    = models.PositiveIntegerField(default=0)   # 0 = unlimited
+    max_lists             = models.PositiveIntegerField(default=0)   # 0 = unlimited
+ 
+    updated_at = models.DateTimeField(auto_now=True)
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name="taskboard_settings_updated"
+    )
+ 
+    def __str__(self):
+        return f"Taskboard settings — {self.workspace.title}"
+
+
+class Notification(models.Model):
+    SECTION_CHOICES = (
+        ("chat", "Workspace Chat"),
+        ("dm", "Direct Message"),
+        ("taskboard", "Taskboard"),
+    )
+
+    workspace = models.ForeignKey(
+        "Workspace", on_delete=models.CASCADE, related_name="notifications"
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="notifications"
+    )
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name="generated_notifications"
+    )
+    section = models.CharField(max_length=20, choices=SECTION_CHOICES)
+    notification_type = models.CharField(max_length=50)
+    reference_id = models.CharField(max_length=100, blank=True, null=True)
+    message = models.CharField(max_length=255)
+    is_read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [models.Index(fields=["workspace", "user", "is_read"])]
+
+    def __str__(self):
+        return f"Notification({self.section}) to {self.user.username}: {self.message[:30]}"
+ 

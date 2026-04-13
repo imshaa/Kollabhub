@@ -17,6 +17,8 @@ urlpatterns = [
     path("api/workspace/<int:workspace_id>/privacy-settings/", views.get_privacy_settings, name="get_privacy_settings"),
     path("api/workspace/<int:workspace_id>/update-privacy-settings/", views.update_privacy_settings, name="update_privacy_settings"),
     path("api/workspace/<int:workspace_id>/cleanup-messages/", views.cleanup_old_messages, name="cleanup_old_messages"),
+    path("api/workspace/<int:workspace_id>/notifications/counts/", views.notification_counts_api, name="notification_counts_api"),
+    path("api/workspace/<int:workspace_id>/notifications/mark-read/", views.notification_mark_read, name="notification_mark_read"),
     path('', views.home, name='home'),
     path('update_profile/', views.update_profile, name='update_profile'),
     path('signup/', views.signup_view, name='signup'),
@@ -37,5 +39,32 @@ urlpatterns = [
     path("invite/<uuid:token>/", views.join_workspace_invite),
             # ---Taskboard-----
     path("taskboard/<int:workspace_id>/", views.taskboard, name="taskboard"),
+ 
+# Taskboard settings
+    path("api/workspace/<int:workspace_id>/taskboard-settings/",        views.taskboard_settings_get,    name="taskboard_settings_get"),
+    path("api/workspace/<int:workspace_id>/taskboard-settings/update/", views.taskboard_settings_update, name="taskboard_settings_update"),
+ 
+# Task Lists
+    path("api/workspace/<int:workspace_id>/lists/",                             views.tasklists_api,   name="tasklists_api"),
+    path("api/workspace/<int:workspace_id>/lists/create/",                      views.tasklist_create, name="tasklist_create"),
+    path("api/workspace/<int:workspace_id>/lists/<int:list_id>/update/",        views.tasklist_update, name="tasklist_update"),
+    path("api/workspace/<int:workspace_id>/lists/<int:list_id>/delete/",        views.tasklist_delete, name="tasklist_delete"),
+ 
+# Tasks
+    path("api/workspace/<int:workspace_id>/tasks/",                             views.tasks_api,    name="tasks_api"),
+    path("api/workspace/<int:workspace_id>/tasks/create/",                      views.task_create,  name="task_create"),
+    path("api/workspace/<int:workspace_id>/tasks/<int:task_id>/update/",        views.task_update,  name="task_update"),
+    path("api/workspace/<int:workspace_id>/tasks/<int:task_id>/delete/",        views.task_delete,  name="task_delete"),
+ 
+# Attachments
+    path("api/workspace/<int:workspace_id>/tasks/<int:task_id>/attachments/upload/",
+     views.task_attachment_upload, name="task_attachment_upload"),
+    path("api/workspace/<int:workspace_id>/tasks/<int:task_id>/attachments/<int:att_id>/delete/",
+     views.task_attachment_delete, name="task_attachment_delete"),
+ 
+# Comments
+     path("api/workspace/<int:workspace_id>/tasks/<int:task_id>/comments/",
+     views.task_comment_create, name="task_comment_create"),
 
-] 
+
+]

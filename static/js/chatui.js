@@ -29,6 +29,35 @@ try {
 // keep track of current / last DM partner on client
 let currentDMUser = null;
 let lastDMUser = null;
+let lastMessageDayKey = null;
+
+function getDateKey(date) {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+
+function formatChatDay(date) {
+  return date.toLocaleDateString(undefined, {
+    weekday: 'long',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric'
+  });
+}
+
+function insertDateDivider(date) {
+  const key = getDateKey(date);
+  if (key === lastMessageDayKey) return;
+  lastMessageDayKey = key;
+
+  const divider = document.createElement('div');
+  divider.className = 'msg-date-divider';
+  divider.textContent = formatChatDay(date);
+  if (chatContainer) {
+    chatContainer.appendChild(divider);
+  }
+}
 
 function joinDM(userId) {
   if (chatSocket && chatSocket.readyState === WebSocket.OPEN) {
@@ -54,6 +83,7 @@ function $$(sel) { return Array.from(document.querySelectorAll(sel)); }
 // Load recent message history when opening the chat UI
 async function loadWorkspaceHistory() {
   chatContainer.innerHTML = "";
+  lastMessageDayKey = null;
   try {
     const resp = await fetch(`/api/workspace/${workspaceId}/messages/?limit=200`, {credentials: 'same-origin'});
     if (!resp.ok) throw new Error('Failed to fetch history');
@@ -79,6 +109,9 @@ async function loadWorkspaceHistory() {
 }
 if (workspaceId) {
   loadWorkspaceHistory();
+  if (window.NotificationManager) {
+    window.NotificationManager.markRead('chat');
+  }
 }
 
 
@@ -99,6 +132,17 @@ if (chatSocket) {
       if (!window._seenMessageIds) window._seenMessageIds = new Set();
       const msgId = data.message_id || data.id || null;
       if (msgId && window._seenMessageIds.has(msgId)) return; // ignore duplicate
+
+      if (data.type === 'notification_event') {
+        if (window.NotificationManager) {
+          window.NotificationManager.handleNotificationEvent(data);
+        }
+        return;
+      }
+
+      if (data.notification && window.NotificationManager) {
+        window.NotificationManager.handleNotificationEvent(data);
+      }
 
       // If this is a DM event and we're not viewing that DM, ignore
       if (data.dm) {
@@ -165,6 +209,7 @@ function initials(name) {
 }
 
 function appendMessageToWindow({ sender, avatar, text, side = "left", time = new Date() }) {
+  insertDateDivider(time);
   const group = document.createElement('div');
   group.className = 'msg-group' + (side === 'right' ? ' self' : '');
 
@@ -249,7 +294,11 @@ function openDM(userId, username) {
   if (chatSubtitle) {
     chatSubtitle.innerText = "Direct Message";
   }
-  loadDMHistory(userId);
+  loadDMHistory(userId).then(() => {
+    if (window.NotificationManager) {
+      window.NotificationManager.markRead('dm', { other_user_id: userId });
+    }
+  });
   if (messageInput) messageInput.placeholder = `Message ${username}`;
   setTimeout(() => {
     if (messageInput) messageInput.focus();
@@ -260,6 +309,7 @@ function openDM(userId, username) {
 async function loadDMHistory(userId){
 
   chatContainer.innerHTML = "";
+  lastMessageDayKey = null;
 
   try{
 
@@ -286,7 +336,7 @@ async function loadDMHistory(userId){
   }
 
 }
-
+//------------------------------- csrf token -------------------------------
 function getCSRFToken() {
   const name = "csrftoken";
   const cookies = document.cookie.split(";");
@@ -544,1316 +594,584 @@ if (sendButton && messageInput) {
 
 
 // ---------------------Modals Logic start-------------------------------
-
-
-
-// --- Modal/View switching logic for sidebar nav and settings/profile ---
+ 
+/* =======================================================
+   VIEW SWITCHING  (chat ↔ settings)
+   ======================================================= */
 function switchView(view) {
-  // if leaving chat view, tear down any DM subscription
   if (view !== 'chat' && currentDMUser) {
-    leaveDM(currentDMUser);
-    currentDMUser = null;
-    lastDMUser = null;
-    const titleEl = document.getElementById('chatChannelTitle');
-    if (titleEl) {
-      titleEl.innerText = 'general';
-      titleEl.classList.remove('dm-header');
-    }
-    const chatSubtitle = document.querySelector('.view-subtitle');
-    if (chatSubtitle) chatSubtitle.innerText = 'Topic: Team announcements and general chatter';
+    leaveDM(currentDMUser); currentDMUser = null; lastDMUser = null;
+    const t = document.getElementById('chatChannelTitle');
+    if (t) { t.innerText = 'general'; t.classList.remove('dm-header'); }
+    const sub = document.querySelector('.view-subtitle');
+    if (sub) sub.innerText = 'Topic: Team announcements and general chatter';
     if (messageInput) messageInput.placeholder = 'Message #general';
   }
   $$('.view').forEach(v => v.classList.remove('active'));
   const el = document.getElementById('view-' + view);
   if (el) el.classList.add('active');
-  // Remove active from nav
-  $$('.nav-item').forEach(b => b.classList.remove('active'));
-  // Set active nav
-  const navBtn = document.querySelector('.nav-item[data-view="' + view + '"]');
-  if (navBtn) navBtn.classList.add('active');
 }
-
-// Sidebar nav buttons (Chat, Tasks, Settings)
-$$('.nav-item').forEach(btn => {
-  btn.addEventListener('click', () => {
-    const view = btn.getAttribute('data-view');
-    switchView(view);
-  });
+ 
+// Settings button in sidebar nav (it's a <button> not a link)
+document.getElementById('settingsNavBtn')?.addEventListener('click', () => {
+  switchView('settings');
+  loadMembers();
+  loadPrivacySettings();
 });
 
-// Settings icon in sidebar footer
-const settingsBtn = document.querySelector('.icon-btn[data-view-trigger="settings"]');
-const sidebarSettingsBtn = document.getElementById('sidebarSettingsBtn');
-if (settingsBtn) {
-  settingsBtn.addEventListener('click', () => switchView('settings'));
-}
-if (sidebarSettingsBtn) {
-  sidebarSettingsBtn.addEventListener('click', () => switchView('settings'));
-}
-
-// Profile modal open (sidebar footer)
-const openProfileBtn = document.getElementById('openProfileBtn');
-// Use the existing profileOverlay reference from later in the file
-// (let the later code own the variable)
-if (openProfileBtn && $('profileOverlay')) {
-  openProfileBtn.addEventListener('click', () => {
-    $('profileOverlay').classList.add('visible');
-  });
-}
-
-// Profile modal close
-const profileCloseBtn = document.getElementById('profileCloseBtn');
-const profileCancelBtn = document.getElementById('profileCancelBtn');
-if (profileCloseBtn && $('profileOverlay')) {
-  profileCloseBtn.addEventListener('click', () => $('profileOverlay').classList.remove('visible'));
-}
-if (profileCancelBtn && $('profileOverlay')) {
-  profileCancelBtn.addEventListener('click', () => $('profileOverlay').classList.remove('visible'));
-}
-if ($('profileOverlay')) {
-  $('profileOverlay').addEventListener('click', e => { if (e.target === $('profileOverlay')) $('profileOverlay').classList.remove('visible'); });
-}
-
-
-// Visibility settings toggles
-(function initVisibilityToggles(){
-  const onlineToggle = document.getElementById('onlineStatusToggle');
-  const lastSeenToggle = document.getElementById('lastSeenToggle');
-  function updateVisibility() {
-    const showOnline = onlineToggle ? onlineToggle.checked : true;
-    document.querySelectorAll('.status-dot').forEach(el => {
-      el.style.visibility = showOnline ? '' : 'hidden';
-    });
-  }
-  if (onlineToggle) {
-    onlineToggle.addEventListener('change', updateVisibility);
-    updateVisibility();
-  }
-  // lastSeenToggle could be wired similarly when last-seen timestamps shown
-})();
-
-
-// Channel switcher
-$$('.channel-item').forEach(btn => {
-  btn.addEventListener('click', () => {
-    $$('.channel-item').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    const ch = btn.dataset.channel;
-    $('chatChannelTitle').textContent = ch;
-    $('chatInput').placeholder = `Message #${ch}`;
-    switchView('chat');
-  });
+// Settings button in sidebar footer
+document.getElementById('sidebarSettingsBtn')?.addEventListener('click', () => {
+  switchView('settings');
+  loadMembers();
+  loadPrivacySettings();
 });
-
-// ========== CHANNELS (dynamic, per workspace) ========== //
-let channels = ["general"];
+ 
+/* =======================================================
+   CHANNELS
+   ======================================================= */
+let channels = ['general'];
 if (window.localStorage && workspaceId) {
-  // Load channels for this workspace from localStorage
-  const saved = localStorage.getItem("channels_" + workspaceId);
-  if (saved) {
-    try { channels = JSON.parse(saved); } catch {}
-  }
+  const saved = localStorage.getItem('channels_' + workspaceId);
+  if (saved) { try { channels = JSON.parse(saved); } catch {} }
 }
-
+ 
 function saveChannels() {
-  if (window.localStorage && workspaceId) {
-    localStorage.setItem("channels_" + workspaceId, JSON.stringify(channels));
-  }
+  if (window.localStorage && workspaceId)
+    localStorage.setItem('channels_' + workspaceId, JSON.stringify(channels));
 }
-
+ 
 function renderChannels() {
-  const list = document.getElementById("channelList");
+  const list = document.getElementById('channelList');
   if (!list) return;
-  list.innerHTML = "";
+  list.innerHTML = '';
   channels.forEach((ch, i) => {
-    const btn = document.createElement("button");
-    btn.className = "channel-item" + (i === 0 ? " active" : "");
-    btn.setAttribute("data-channel", ch);
-    btn.textContent = "# " + ch;
-    btn.addEventListener("click", () => {
-      $$('.channel-item').forEach(b => b.classList.remove('active'));
+    const btn = document.createElement('button');
+    btn.className = 'nav-item' + (i === 0 ? ' active' : '');
+    btn.dataset.channel = ch;
+    btn.innerHTML = `<span style="opacity:.4">#</span> ${ch}`;
+    btn.style.paddingLeft = '10px';
+    btn.addEventListener('click', () => {
+      list.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       $('chatChannelTitle').textContent = ch;
-      $('chatInput').placeholder = `Message #${ch}`;
+      if (messageInput) messageInput.placeholder = `Message #${ch}`;
       switchView('chat');
-      // Optionally: update current channel for websocket logic if needed
     });
     list.appendChild(btn);
   });
 }
 renderChannels();
-
-// Add channel button logic
-const addChannelBtn = document.getElementById('addChannelBtn');
-const addChannelInputWrap = document.getElementById('addChannelInputWrap');
-const addChannelInput = document.getElementById('addChannelInput');
+ 
+const addChannelBtn        = document.getElementById('addChannelBtn');
+const addChannelInputWrap  = document.getElementById('addChannelInputWrap');
+const addChannelInputEl    = document.getElementById('addChannelInput');
 const confirmAddChannelBtn = document.getElementById('confirmAddChannelBtn');
-if (addChannelBtn && addChannelInputWrap && addChannelInput && confirmAddChannelBtn) {
+ 
+if (addChannelBtn && addChannelInputWrap && addChannelInputEl && confirmAddChannelBtn) {
   addChannelBtn.addEventListener('click', () => {
     addChannelInputWrap.style.display = 'flex';
-    addChannelInput.value = '';
-    addChannelInput.focus();
+    addChannelInputEl.value = '';
+    addChannelInputEl.focus();
   });
-  confirmAddChannelBtn.addEventListener('click', () => {
-    const name = addChannelInput.value.trim();
+  const doAddChannel = () => {
+    const name = addChannelInputEl.value.trim();
     if (!name || channels.includes(name)) return;
     channels.push(name);
     saveChannels();
     renderChannels();
     addChannelInputWrap.style.display = 'none';
-  });
-  addChannelInput.addEventListener('keydown', e => {
-    if (e.key === 'Enter') {
-      confirmAddChannelBtn.click();
-    } else if (e.key === 'Escape') {
-      addChannelInputWrap.style.display = 'none';
-    }
+  };
+  confirmAddChannelBtn.addEventListener('click', doAddChannel);
+  addChannelInputEl.addEventListener('keydown', e => {
+    if (e.key === 'Enter') doAddChannel();
+    else if (e.key === 'Escape') addChannelInputWrap.style.display = 'none';
   });
 }
-
-
-
-/* ══════════════════════════════════════════════════
-   2. TASK BOARD
-══════════════════════════════════════════════════ */
-
-document.getElementById("taskBtn").addEventListener("click", function () {
-    window.location.href = "taskboard.html";
-});
-
-/* ══════════════════════════════════════════════════
-   3. SETTINGS TABS
-══════════════════════════════════════════════════ */
+ 
+/* =======================================================
+   SETTINGS TABS
+   ======================================================= */
 const tabs      = $$('.tab');
 const tabPanels = $$('.tab-panel');
 const indicator = $('tabIndicator');
-
+ 
 function switchTab(tabEl) {
   tabs.forEach(t => t.classList.remove('active'));
   tabPanels.forEach(p => p.classList.remove('active'));
   tabEl.classList.add('active');
-
   const tabId = tabEl.dataset.tab;
   $(`tab-${tabId}`)?.classList.add('active');
-
-  // danger tab: red indicator
-  indicator.style.background = tabId === 'danger' ? 'var(--red)' : 'var(--accent)';
-
-  // move indicator
-  const rect   = tabEl.getBoundingClientRect();
-  const barRect = tabEl.parentElement.getBoundingClientRect();
-  indicator.style.left  = (rect.left - barRect.left) + 'px';
-  indicator.style.width = rect.width + 'px';
-  
-  // Load data when tabs are accessed
-  if (tabId === 'danger') {
-    loadTransferMembers();
-  } else if (tabId === 'privacy') {
-    loadPrivacySettings();
+  if (indicator) {
+    indicator.style.background = tabId === 'danger' ? 'var(--red)' : 'var(--accent)';
+    const rect    = tabEl.getBoundingClientRect();
+    const barRect = tabEl.parentElement.getBoundingClientRect();
+    indicator.style.left  = (rect.left - barRect.left) + 'px';
+    indicator.style.width = rect.width + 'px';
   }
+  if (tabId === 'danger')      loadTransferMembers();
+  else if (tabId === 'privacy') loadPrivacySettings();
+  else if (tabId === 'users')   loadMembers();
+  else if (tabId === 'invitations') { loadSentInvitations(); loadInviteLinks(); }
 }
-
+ 
 tabs.forEach(tab => tab.addEventListener('click', () => switchTab(tab)));
-
-// Init indicator on first active tab
 requestAnimationFrame(() => {
   const activeTab = document.querySelector('.tab.active');
   if (activeTab) switchTab(activeTab);
 });
-
-/* ── Members list ─────────────────────────────── */
-
-let members = [];
-// Try to get isAdminUser from data attributes, default to false
-let isAdminUser = document.body.dataset.isAdmin === 'true' || chatContainer?.dataset?.isAdmin === 'true' ? true : false;
-console.log('Initial isAdminUser value:', isAdminUser);
+ 
+/* =======================================================
+   MEMBERS
+   ======================================================= */
+let members       = [];
+let isAdminUser   = false;
 let removingMemberId = null;
-
-// Fetch members from API
+ 
 async function loadMembers() {
   try {
-    const response = await fetch(`/api/workspace/${workspaceId}/members/`, {
-      credentials: 'same-origin'
-    });
-    if (!response.ok) throw new Error('Failed to fetch members');
-    const data = await response.json();
-    members = data.members;
+    const r    = await fetch(`/api/workspace/${workspaceId}/members/`, { credentials: 'same-origin' });
+    const data = await r.json();
+    members     = data.members;
     isAdminUser = data.is_admin;
     renderMembers();
   } catch (err) {
     console.error('Error loading members:', err);
     const list = $('memberList');
-    list.innerHTML = '<p style="color:var(--red);padding:20px;">Failed to load members</p>';
+    if (list) list.innerHTML = '<p style="color:var(--red);padding:20px;">Failed to load members</p>';
   }
 }
-
+ 
 function renderMembers() {
-  const list = $('memberList');
+  const list      = $('memberList');
   const countText = $('memberCountText');
-  
-  // Update member count
+  if (!list) return;
+ 
   if (countText) {
-    const count = members.length;
-    countText.textContent = count === 1 
-      ? '1 person in this workspace' 
-      : `${count} people in this workspace`;
+    const c = members.length;
+    countText.textContent = c === 1 ? '1 person in this workspace' : `${c} people in this workspace`;
   }
-
   list.innerHTML = '';
-
-  if (members.length === 0) {
-    list.innerHTML = '<p style="color:var(--muted);padding:20px;text-align:center;">No members in this workspace</p>';
+ 
+  if (!members.length) {
+    list.innerHTML = '<p style="color:var(--muted);padding:20px;text-align:center;">No members</p>';
     return;
   }
-
+ 
   members.forEach((m, i) => {
     const row = document.createElement('div');
     row.className = 'member-row';
     row.style.animationDelay = `${i * 0.05}s`;
-    
-    const memberAvatar = m.avatar 
+ 
+    const avHTML = m.avatar
       ? `<img src="${m.avatar}" alt="${m.display_name}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;"/>`
-      : `${initials(m.display_name)}`;
-
+      : initials(m.display_name);
+ 
     const isCurrentUser = m.id === currentUserId;
-    const isAdmin = m.role === 'admin';
-    
-    let actionButton = '';
+    const isAdmin       = m.role === 'admin';
+    let actionBtn = '';
+ 
     if (!isCurrentUser && !isAdmin && isAdminUser) {
-      // Show remove button for admins removing non-admin members
       if (removingMemberId === m.id) {
-        actionButton = `
+        actionBtn = `
           <div class="member-row-actions confirm-mode">
             <button class="member-confirm-btn" data-user-id="${m.id}" data-username="${m.username}">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
-              Confirm
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>Confirm
             </button>
             <button class="member-cancel-btn" data-user-id="${m.id}">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-              Cancel
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>Cancel
             </button>
-          </div>
-        `;
+          </div>`;
       } else {
-        actionButton = `
+        actionBtn = `
           <button class="remove-btn" data-user-id="${m.id}">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2l-2-14"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
-            Remove
-          </button>
-        `;
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2l-2-14"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>Remove
+          </button>`;
       }
     }
-
+ 
     row.innerHTML = `
       <div class="member-row-content">
-        <div class="member-row-av" style="background:${avatarColor(m.display_name)}">
-          ${memberAvatar}
+        <div class="member-row-av" style="background:${avatarColor(m.display_name)}">${avHTML}
           <span class="status-dot ${m.status}"></span>
         </div>
         <div class="member-row-info">
-          <div class="member-row-name">
-            ${m.display_name}
-            <span class="member-role-badge ${m.role.toLowerCase()}">${m.role}</span>
-          </div>
+          <div class="member-row-name">${m.display_name} <span class="member-role-badge ${m.role.toLowerCase()}">${m.role}</span></div>
           <div class="member-row-status">${m.status}</div>
         </div>
-      </div>
-      ${actionButton}
-    `;
-    
+      </div>${actionBtn}`;
     list.appendChild(row);
   });
-
-  // Attach event listeners
-  $$('.remove-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const userId = parseInt(btn.dataset.userId, 10);
-      removingMemberId = userId;
-      renderMembers();
-    });
-  });
-
-  $$('.member-confirm-btn').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      const username = btn.dataset.username;
-      const userId = parseInt(btn.dataset.userId, 10);
-      await removeMember(username, userId);
-    });
-  });
-
-  $$('.member-cancel-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      removingMemberId = null;
-      renderMembers();
-    });
-  });
+ 
+  $$('.remove-btn').forEach(btn =>
+    btn.addEventListener('click', () => { removingMemberId = parseInt(btn.dataset.userId, 10); renderMembers(); })
+  );
+  $$('.member-confirm-btn').forEach(btn =>
+    btn.addEventListener('click', () => removeMember(btn.dataset.username, parseInt(btn.dataset.userId, 10)))
+  );
+  $$('.member-cancel-btn').forEach(btn =>
+    btn.addEventListener('click', () => { removingMemberId = null; renderMembers(); })
+  );
 }
-
-async function removeMember(username, userId) {
+ 
+async function removeMember(uname, userId) {
   try {
-    const formData = new FormData();
-    formData.append('username', username);
-    formData.append('csrfmiddlewaretoken', getCSRFToken());
-    
-    console.log('Attempting to remove member:', username, 'User ID:', userId);
-    console.log('Workspace ID:', workspaceId);
-    
-    const response = await fetch(
-      `/workspace/${workspaceId}/remove-member/`,
-      {
-        method: 'POST',
-        body: formData,
-        credentials: 'same-origin',
-        headers: {
-          'X-Requested-With': 'XMLHttpRequest'
-        }
-      }
-    );
-
-    console.log('Response status:', response.status);
-    const data = await response.json();
-    console.log('Response data:', data);
-
+    const fd = new FormData();
+    fd.append('username', uname);
+    fd.append('csrfmiddlewaretoken', getCSRFToken());
+    const r    = await fetch(`/workspace/${workspaceId}/remove-member/`, {
+      method: 'POST', body: fd, credentials: 'same-origin',
+      headers: { 'X-Requested-With': 'XMLHttpRequest' }
+    });
+    const data = await r.json();
     if (data.success) {
-      // Remove from local list and update UI
       members = members.filter(m => m.id !== userId);
       removingMemberId = null;
       renderMembers();
-      showSuccessMessage(data.message || `${username} has been removed`);
-    } else if (data.error) {
-      showErrorMessage(data.error);
-      removingMemberId = null;
+      showSuccessMessage(data.message || `${uname} removed`);
     } else {
-      showErrorMessage('Failed to remove member');
+      showErrorMessage(data.error || 'Failed to remove member');
       removingMemberId = null;
     }
   } catch (err) {
-    console.error('Error removing member:', err);
-    showErrorMessage('Error removing member. Please try again.');
+    console.error('Remove error:', err);
+    showErrorMessage('Error removing member');
     removingMemberId = null;
   }
 }
-
-function showSuccessMessage(msg) {
-  const messageEl = document.createElement('div');
-  messageEl.className = 'messages success';
-  messageEl.innerHTML = `<div class="message success">${msg}</div>`;
+ 
+function showSuccessMessage(msg) { _showMsg(msg, 'success'); }
+function showErrorMessage(msg)   { _showMsg(msg, 'error');   }
+function _showMsg(msg, type) {
+  const el = document.createElement('div');
+  el.className = `messages ${type}`;
+  el.innerHTML = `<div class="message ${type}">${msg}</div>`;
   const view = document.getElementById('view-settings');
-  if (view) {
-    const header = view.querySelector('.view-header');
-    if (header) {
-      header.parentElement.insertBefore(messageEl, header.nextSibling);
-      setTimeout(() => messageEl.remove(), 3000);
-    }
-  }
+  const hdr  = view?.querySelector('.view-header');
+  if (hdr) { hdr.parentElement.insertBefore(el, hdr.nextSibling); setTimeout(() => el.remove(), 3000); }
 }
-
-function showErrorMessage(msg) {
-  const messageEl = document.createElement('div');
-  messageEl.className = 'messages error';
-  messageEl.innerHTML = `<div class="message error">${msg}</div>`;
-  const view = document.getElementById('view-settings');
-  if (view) {
-    const header = view.querySelector('.view-header');
-    if (header) {
-      header.parentElement.insertBefore(messageEl, header.nextSibling);
-      setTimeout(() => messageEl.remove(), 3000);
-    }
-  }
-}
-
-// Load members when settings view is clicked
-const settingsTabs = $$('.tab[data-tab="users"]');
-settingsTabs.forEach(tab => {
-  tab.addEventListener('click', () => {
-    // Refresh members when switching to users tab
-    loadMembers();
-  });
-});
-
-// Initial load
-if (workspaceId) {
-  loadMembers();
-}
-
-/* ── Invite links ───────────────────────────── */
-
+ 
+if (workspaceId) loadMembers();
+ 
+/* =======================================================
+   INVITE LINKS
+   ======================================================= */
 let inviteLinks = [];
-
-/* Load invite links from backend */
+ 
 async function loadInviteLinks() {
   try {
-    const res = await fetch(`/api/workspace/${workspaceId}/invite-links/`);
-    const data = await res.json();
-
+    const r    = await fetch(`/api/workspace/${workspaceId}/invite-links/`);
+    const data = await r.json();
     inviteLinks = data.links || [];
     renderInviteLinks();
-  } catch (err) {
-    console.error("Failed to load invite links", err);
-  }
+  } catch (err) { console.error('Failed to load invite links', err); }
 }
-
-
-/* Create new invite link */
+ 
 const createInviteBtn = $('createInviteBtn');
-
 if (createInviteBtn) {
   createInviteBtn.addEventListener('click', async () => {
-
     try {
-      // Prompt user for expiry (optional)
-      const expiryInput = prompt("Enter expiry period in days (leave blank for no expiry):");
+      const expiryInput = prompt("Expiry in days (leave blank for no expiry):");
       let expires_in_days = null;
-      
       if (expiryInput !== null && expiryInput.trim() !== "") {
         const days = parseInt(expiryInput, 10);
-        if (isNaN(days) || days <= 0) {
-          alert("Please enter a valid number of days");
-          return;
-        }
+        if (isNaN(days) || days <= 0) { alert("Enter a valid number of days"); return; }
         expires_in_days = days;
       }
-
-      const res = await fetch(`/api/workspace/${workspaceId}/create-invite/`, {
+      const r    = await fetch(`/api/workspace/${workspaceId}/create-invite/`, {
         method: 'POST',
-        headers: {
-          "X-CSRFToken": getCSRFToken(),
-          "Content-Type": "application/json"
-        },
+        headers: { 'X-CSRFToken': getCSRFToken(), 'Content-Type': 'application/json' },
         body: JSON.stringify({ expires_in_days })
       });
-
-      const data = await res.json();
-
-      if (data.success) {
-        inviteLinks.push(data.link);
-        renderInviteLinks();
-        showSuccessMessage("Invite link created successfully");
-      } else {
-        showErrorMessage(data.error || "Failed to create invite link");
-      }
-
-    } catch (err) {
-      console.error("Invite creation failed", err);
-      showErrorMessage("Failed to create invite link");
-    }
-
+      const data = await r.json();
+      if (data.success) { inviteLinks.push(data.link); renderInviteLinks(); showSuccessMessage("Invite link created"); }
+      else showErrorMessage(data.error || "Failed to create invite link");
+    } catch (err) { showErrorMessage("Failed to create invite link"); }
   });
 }
-
-
-/* Render invite links */
+ 
 function renderInviteLinks() {
-
   const el = $('inviteLinks');
   if (!el) return;
-
-  if (inviteLinks.length === 0) {
-    el.innerHTML = `
-      <div style="padding:20px;text-align:center;color:var(--text-500);font-size:.8rem;border:1px dashed var(--border);border-radius:var(--radius-lg);">
-        No active invite links
-      </div>`;
+  if (!inviteLinks.length) {
+    el.innerHTML = `<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:.8rem;border:1px dashed var(--border);border-radius:10px;">No active invite links</div>`;
     return;
   }
-
   el.innerHTML = '';
-
   inviteLinks.forEach(lnk => {
-
     const row = document.createElement('div');
     row.className = 'invite-link-row';
-    
-    // Determine status styling
-    let statusColor = '';
-    let statusIcon = '✓';
-    
-    if (lnk.is_expired) {
-      statusColor = 'color: var(--red);';
-      statusIcon = '⚠';
-    }
-
     row.innerHTML = `
       <div style="flex:1;min-width:0;">
         <div class="invite-link-code">${lnk.code}</div>
-        <div class="invite-link-meta" style="${statusColor}">
-          ${statusIcon} Expires: ${lnk.expires} · ${lnk.usage} uses
-          ${lnk.created_by ? ' · by ' + lnk.created_by : ''}
+        <div class="invite-link-meta" style="${lnk.is_expired ? 'color:var(--red)' : ''}">
+          ${lnk.is_expired ? '⚠' : '✓'} Expires: ${lnk.expires} · ${lnk.usage} uses${lnk.created_by ? ' · by ' + lnk.created_by : ''}
         </div>
       </div>
-
       <div class="invite-link-actions">
-
         <button class="icon-btn copy-lnk" data-id="${lnk.id}" title="Copy" ${lnk.is_expired ? 'disabled' : ''}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="9" y="9" width="13" height="13" rx="2"/>
-            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
-          </svg>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
         </button>
-
         <button class="icon-btn revoke-lnk" data-id="${lnk.id}" title="Revoke">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="3 6 5 6 21 6"/>
-            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
-          </svg>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
         </button>
-
-      </div>
-    `;
-
+      </div>`;
     el.appendChild(row);
   });
-
-
-  /* Copy invite link */
-  $$('.copy-lnk').forEach(btn => {
-
-    btn.addEventListener('click', async () => {
-
-      if (btn.disabled) return;
-      
-      const link = inviteLinks.find(l => String(l.id) === btn.dataset.id);
-      if (!link || link.is_expired) return;
-
-      const fullLink = window.location.origin + link.code;
-
-      try {
-
-        await navigator.clipboard.writeText(fullLink);
-
-        btn.innerHTML = `
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2.5">
-          <polyline points="20 6 9 17 4 12"/>
-        </svg>`;
-
-        setTimeout(() => {
-          btn.innerHTML = `
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="9" y="9" width="13" height="13" rx="2"/>
-            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
-          </svg>`;
-        }, 1800);
-
-      } catch (err) {
-        console.error("Copy failed", err);
-      }
-
-    });
-
-  });
-
-
-  /* Revoke invite link */
-  $$('.revoke-lnk').forEach(btn => {
-
-    btn.addEventListener('click', async () => {
-
-      const inviteId = btn.dataset.id;
-
-      try {
-
-        await fetch(`/api/invite/${inviteId}/revoke/`, {
-          method: 'POST',
-          headers: {
-            "X-CSRFToken": getCSRFToken()
-          }
-        });
-
-        inviteLinks = inviteLinks.filter(l => String(l.id) !== inviteId);
-
-        renderInviteLinks();
-
-      } catch (err) {
-        console.error("Revoke failed", err);
-      }
-
-    });
-
-  });
-
+ 
+  $$('.copy-lnk').forEach(btn => btn.addEventListener('click', async () => {
+    if (btn.disabled) return;
+    const lnk = inviteLinks.find(l => String(l.id) === btn.dataset.id);
+    if (!lnk || lnk.is_expired) return;
+    try {
+      await navigator.clipboard.writeText(window.location.origin + lnk.code);
+      btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>`;
+      setTimeout(() => btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`, 1800);
+    } catch {}
+  }));
+  $$('.revoke-lnk').forEach(btn => btn.addEventListener('click', async () => {
+    try {
+      await fetch(`/api/invite/${btn.dataset.id}/revoke/`, { method: 'POST', headers: { 'X-CSRFToken': getCSRFToken() } });
+      inviteLinks = inviteLinks.filter(l => String(l.id) !== btn.dataset.id);
+      renderInviteLinks();
+    } catch (err) { console.error('Revoke failed', err); }
+  }));
 }
-
-
-/* Load invites when page loads */
-document.addEventListener('DOMContentLoaded', () => {
-
-  renderInviteLinks();
-  loadInviteLinks();
-
-});
-
-/* ── Sent Invitations ───────────────────────── */
+ 
+document.addEventListener('DOMContentLoaded', () => { loadInviteLinks(); renderInviteLinks(); });
+ 
+/* =======================================================
+   SENT INVITATIONS
+   ======================================================= */
 let sentInvitations = [];
-
+ 
 async function loadSentInvitations() {
   try {
-    const response = await fetch(`/api/workspace/${workspaceId}/sent-invitations/`);
-    const data = await response.json();
+    const r    = await fetch(`/api/workspace/${workspaceId}/sent-invitations/`);
+    const data = await r.json();
     sentInvitations = data.invitations;
     renderSentInvitations();
-  } catch (err) {
-    console.error('Error loading sent invitations:', err);
-  }
+  } catch (err) { console.error('Error loading sent invitations:', err); }
 }
-
+ 
 function renderSentInvitations() {
   const el = $('sentInvitesList');
   if (!el) return;
   el.innerHTML = '';
-  
-  if (sentInvitations.length === 0) {
-    el.innerHTML = `<div style="padding:20px;text-align:center;color:var(--text-500);font-size:.85rem;border:1px dashed var(--border);border-radius:var(--radius-lg);">No invitations sent yet</div>`;
+  if (!sentInvitations.length) {
+    el.innerHTML = `<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:.85rem;border:1px dashed var(--border);border-radius:10px;">No invitations sent yet</div>`;
     return;
   }
-  
   sentInvitations.forEach(inv => {
     const row = document.createElement('div');
     row.className = 'invite-item';
-    const statusClass = inv.status === 'accepted' ? 'accepted' : 'pending';
-    const roleClass = inv.role === 'admin' ? 'admin' : 'member';
-    
     row.innerHTML = `
       <div style="flex:1;">
         <div class="invite-item-email">${inv.recipient}</div>
-        <div class="invite-item-meta">
-          <span class="role-badge ${roleClass}">${inv.role}</span>
-          · Sent ${inv.created_at}
-        </div>
+        <div class="invite-item-meta"><span class="role-badge ${inv.role}">${inv.role}</span> · Sent ${inv.created_at}</div>
       </div>
-      <span class="invite-status ${statusClass}">${inv.status}</span>
-    `;
+      <span class="invite-status ${inv.status}">${inv.status}</span>`;
     el.appendChild(row);
   });
 }
-
-/* Send Invitations */
-$('sendIdentifierInviteBtn').addEventListener('click', async () => {
-  const identifiers = $('identifierInviteInput').value.trim().split(',').map(id => id.trim()).filter(id => id);
-  const role = $('roleSelect').value;
-  
-  if (identifiers.length === 0) {
-    showErrorMessage('No emails or usernames provided');
-    return;
-  }
-  
-  const btn = $('sendIdentifierInviteBtn');
-  const originalText = btn.innerHTML;
-  btn.disabled = true;
-  btn.textContent = 'Sending…';
-  
-  let successCount = 0;
-  let failureCount = 0;
-  
-  for (const identifier of identifiers) {
-    try {
-      console.log('Sending invitation for:', identifier, 'as', role);
-      
-      const response = await fetch(`/api/workspace/${workspaceId}/send-invitation/`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Requested-With': 'XMLHttpRequest',
-          'X-CSRFToken': getCSRFToken()
-        },
-        credentials: 'same-origin',
-        body: JSON.stringify({ identifier, role })
-      });
-      
-      console.log('Response status:', response.status);
-      const data = await response.json();
-      console.log('Response data:', data);
-      
-      if (response.ok && data.success) {
-        successCount++;
-        console.log('Invitation sent successfully');
-      } else {
-        failureCount++;
-        console.error('Invitation failed:', data.error);
-      }
-    } catch (err) {
-      failureCount++;
-      console.error('Error sending invitation:', err);
+ 
+const sendInviteBtn = $('sendIdentifierInviteBtn');
+if (sendInviteBtn) {
+  sendInviteBtn.addEventListener('click', async () => {
+    const identifiers = $('identifierInviteInput').value.trim().split(',').map(s => s.trim()).filter(Boolean);
+    const role        = $('roleSelect').value;
+    if (!identifiers.length) { showErrorMessage('No emails or usernames provided'); return; }
+ 
+    sendInviteBtn.disabled = true;
+    sendInviteBtn.textContent = 'Sending…';
+    let ok = 0, fail = 0;
+ 
+    for (const identifier of identifiers) {
+      try {
+        const r = await fetch(`/api/workspace/${workspaceId}/send-invitation/`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'X-CSRFToken': getCSRFToken() },
+          credentials: 'same-origin',
+          body: JSON.stringify({ identifier, role })
+        });
+        const data = await r.json();
+        if (r.ok && data.success) ok++; else fail++;
+      } catch { fail++; }
     }
-  }
-  
-  btn.disabled = false;
-  btn.innerHTML = originalText;
-  
-  if (successCount > 0) {
-    showSuccessMessage(`${successCount} invitation(s) sent successfully!`);
-    $('identifierInviteInput').value = '';
-    $('roleSelect').value = 'member';
-    await loadSentInvitations();
-  } 
-  
-  if (failureCount > 0) {
-    showErrorMessage(`Failed to send ${failureCount} invitation(s). Check the identifiers and try again.`);
-  }
-});
-
-/* Invite Member button - navigate to invitations */
-$('inviteMemberBtn').addEventListener('click', () => {
-  const inviteTab = document.querySelector('.tab[data-tab="invitations"]');
-  if (inviteTab) {
-    inviteTab.click();
-  }
-});
-
-/* Load sent invitations when switching to invitations tab */
-const inviteTab = document.querySelector('.tab[data-tab="invitations"]');
-if (inviteTab) {
-  inviteTab.addEventListener('click', () => {
-    loadSentInvitations();
+ 
+    sendInviteBtn.disabled = false;
+    sendInviteBtn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg> Send Invitations`;
+ 
+    if (ok)   { showSuccessMessage(`${ok} invitation(s) sent!`); $('identifierInviteInput').value = ''; await loadSentInvitations(); }
+    if (fail) { showErrorMessage(`${fail} invitation(s) failed.`); }
   });
 }
-
-
-/* ── Privacy Settings ─────────────────────────── */
+ 
+const inviteMemberBtn = $('inviteMemberBtn');
+if (inviteMemberBtn) {
+  inviteMemberBtn.addEventListener('click', () => { document.querySelector('.tab[data-tab="invitations"]')?.click(); });
+}
+ 
+/* =======================================================
+   PRIVACY SETTINGS
+   ======================================================= */
 let currentPrivacySettings = {};
-let privacySettingsLoaded = false;
-
+ 
 async function loadPrivacySettings() {
   try {
-    const response = await fetch(`/api/workspace/${workspaceId}/privacy-settings/`);
-    const data = await response.json();
-    
-    if (!response.ok) {
-      console.error('Error loading privacy settings:', data.error);
-      return;
-    }
-    
-    console.log('Privacy settings data:', data);
-    console.log('is_admin from API:', data.is_admin);
-    
+    const r    = await fetch(`/api/workspace/${workspaceId}/privacy-settings/`);
+    const data = await r.json();
+    if (!r.ok) return;
     currentPrivacySettings = data;
     isAdminUser = data.is_admin;
-    console.log('isAdminUser now:', isAdminUser);
     updatePrivacyUI();
-  } catch (err) {
-    console.error('Error loading privacy settings:', err);
-  }
+  } catch (err) { console.error('Privacy load error:', err); }
 }
-
+ 
 function updatePrivacyUI() {
-  // Update visibility buttons
-  const visPublic = $('visPublic');
-  const visPrivate = $('visPrivate');
-  const inviteToggle = $('inviteToggle');
-  const profileToggle = $('profileToggle');
-  const retentionSelect = $('messageRetentionSelect');
-  const saveBtn = $('savePrivacyBtn');
-  
-  if (!visPublic || !visPrivate || !inviteToggle || !retentionSelect || !saveBtn) {
-    console.warn('Privacy settings elements not found in DOM');
-    return;
-  }
-  
-  // Update visibility buttons
-  if (currentPrivacySettings.visibility === 'public') {
-    visPublic.classList.add('active');
-    visPrivate.classList.remove('active');
-  } else {
-    visPrivate.classList.add('active');
-    visPublic.classList.remove('active');
-  }
-  
-  // Update invite restriction toggle
-  if (currentPrivacySettings.invites_restricted_to_admins) {
-    inviteToggle.classList.add('active');
-  } else {
-    inviteToggle.classList.remove('active');
-  }
-  
-  // Update profile visibility toggle (front-end only, no backend persistence yet)
-  if (profileToggle) {
-    // Initialize to unchecked since backend doesn't have this field yet
-    profileToggle.classList.remove('active');
-  }
-  
-  // Update message retention select
-  if (currentPrivacySettings.message_retention_days === null) {
-    retentionSelect.value = 'Forever';
-  } else if (currentPrivacySettings.message_retention_days === 7) {
-    retentionSelect.value = '7 Days';
-  } else if (currentPrivacySettings.message_retention_days === 30) {
-    retentionSelect.value = '30 Days';
-  } else if (currentPrivacySettings.message_retention_days === 90) {
-    retentionSelect.value = '90 Days';
-  }
-  
-  // Handle controls based on admin status
-  console.log('updatePrivacyUI - isAdminUser:', isAdminUser);
-  
-  if (isAdminUser === true) {
-    // Enable all controls for admins
-    visPublic.disabled = false;
-    visPrivate.disabled = false;
-    inviteToggle.disabled = false;
-    if (profileToggle) profileToggle.disabled = false;
-    retentionSelect.disabled = false;
-    saveBtn.disabled = false;
-    // Remove admin-only notice if it exists
-    const privacyPanel = $('tab-privacy');
-    const notice = privacyPanel?.querySelector('.admin-only-notice');
-    if (notice) notice.remove();
-  } else {
-    // Disable controls for non-admins
-    visPublic.disabled = true;
-    visPrivate.disabled = true;
-    inviteToggle.disabled = true;
-    if (profileToggle) profileToggle.disabled = true;
-    retentionSelect.disabled = true;
-    saveBtn.disabled = true;
-    // Show admin-only message if not already shown
-    const privacyPanel = $('tab-privacy');
-    if (privacyPanel && !privacyPanel.querySelector('.admin-only-notice')) {
-      const notice = document.createElement('div');
-      notice.className = 'admin-only-notice';
-      notice.innerHTML = '<p style="color: var(--text-500); font-size: 0.85rem; padding: 12px; background: var(--bg); border-radius: var(--radius-md); border: 1px dashed var(--border);">ℹ Only workspace admins can change privacy settings.</p>';
-      privacyPanel.insertBefore(notice, privacyPanel.firstChild);
-    }
-  }
+  const vp = $('visPublic'); const vpr = $('visPrivate');
+  const it = $('inviteToggle'); const pt = $('profileToggle');
+  const rs = $('messageRetentionSelect'); const sb = $('savePrivacyBtn');
+  if (!vp || !vpr || !it || !rs || !sb) return;
+ 
+  if (currentPrivacySettings.visibility === 'public') { vp.classList.add('active'); vpr.classList.remove('active'); }
+  else { vpr.classList.add('active'); vp.classList.remove('active'); }
+ 
+  currentPrivacySettings.invites_restricted_to_admins ? it.classList.add('active') : it.classList.remove('active');
+  if (pt) pt.classList.remove('active');
+ 
+  const days = currentPrivacySettings.message_retention_days;
+  rs.value = days === null ? 'Forever' : days === 7 ? '7 Days' : days === 30 ? '30 Days' : days === 90 ? '90 Days' : 'Forever';
+ 
+  const disabled = !isAdminUser;
+  [vp, vpr, it, rs, sb].forEach(el => el.disabled = disabled);
+  if (pt) pt.disabled = disabled;
 }
-
-// Privacy button event listeners - with null checks
-const privacyVisPublic = $('visPublic');
-const privacyVisPrivate = $('visPrivate');
-if (privacyVisPublic) {
-  privacyVisPublic.addEventListener('click', () => {
-    privacyVisPublic.classList.add('active');
-    privacyVisPrivate?.classList.remove('active');
+ 
+['visPublic','visPrivate'].forEach(id => {
+  $(id)?.addEventListener('click', () => {
+    $('visPublic')?.classList.toggle('active', id === 'visPublic');
+    $('visPrivate')?.classList.toggle('active', id === 'visPrivate');
   });
-}
-if (privacyVisPrivate) {
-  privacyVisPrivate.addEventListener('click', () => {
-    privacyVisPrivate.classList.add('active');
-    privacyVisPublic?.classList.remove('active');
-  });
-}
-
-// Invite restriction toggle
-const privacyInviteToggle = $('inviteToggle');
-if (privacyInviteToggle) {
-  privacyInviteToggle.addEventListener('click', () => {
-    privacyInviteToggle.classList.toggle('active');
-  });
-}
-
-// Profile visibility toggle
-const privacyProfileToggle = $('profileToggle');
-if (privacyProfileToggle) {
-  privacyProfileToggle.addEventListener('click', () => {
-    privacyProfileToggle.classList.toggle('active');
-  });
-}
-
-// Save privacy settings
-const privacySaveBtn = $('savePrivacyBtn');
-if (privacySaveBtn) {
-  privacySaveBtn.addEventListener('click', async () => {
-    if (isAdminUser !== true) {
-      showErrorMessage('Only admins can save privacy settings');
-      return;
-    }
-    
-    const visPublicBtn = $('visPublic');
-    const inviteToggleBtn = $('inviteToggle');
-    const retentionSelectEl = $('messageRetentionSelect');
-    
-    if (!visPublicBtn || !inviteToggleBtn || !retentionSelectEl) {
-      showErrorMessage('Privacy settings elements not found');
-      return;
-    }
-    
-    const visibility = visPublicBtn.classList.contains('active') ? 'public' : 'private';
-    const invitesRestrictedToAdmins = inviteToggleBtn.classList.contains('active');
-    
-    // Parse retention days from select value (e.g., "7 Days" -> 7)
-    let messageRetentionDays = null;
-    if (retentionSelectEl.value !== 'Forever') {
-      const match = retentionSelectEl.value.match(/\d+/);
-      if (match) {
-        messageRetentionDays = parseInt(match[0], 10);
-      }
-    }
-    
-    privacySaveBtn.disabled = true;
-    privacySaveBtn.textContent = 'Saving…';
-    
-    try {
-      const response = await fetch(`/api/workspace/${workspaceId}/update-privacy-settings/`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-CSRFToken': getCSRFToken()
-        },
-        credentials: 'same-origin',
-        body: JSON.stringify({
-          visibility,
-          invites_restricted_to_admins: invitesRestrictedToAdmins,
-          message_retention_days: messageRetentionDays
-        })
-      });
-      
-      const data = await response.json();
-      
-      if (response.ok && data.success) {
-        showSuccessMessage('Privacy settings updated successfully!');
-        currentPrivacySettings = data.settings;
-        const msg = $('saveConfirm');
-        if (msg) {
-          msg.classList.add('visible');
-          setTimeout(() => msg.classList.remove('visible'), 2500);
-        }
-      } else {
-        showErrorMessage(data.error || 'Failed to update privacy settings');
-      }
-    } catch (err) {
-      console.error('Error saving privacy settings:', err);
-      showErrorMessage('Error saving privacy settings');
-    } finally {
-      privacySaveBtn.disabled = false;
-      privacySaveBtn.textContent = 'Save Changes';
-    }
-  });
-}
-
-/* ── Danger zone ─────────────────────────── */
-
-// Load non-admin members for transfer ownership
+});
+$('inviteToggle')?.addEventListener('click', () => $('inviteToggle').classList.toggle('active'));
+$('profileToggle')?.addEventListener('click', () => $('profileToggle').classList.toggle('active'));
+ 
+$('savePrivacyBtn')?.addEventListener('click', async () => {
+  if (!isAdminUser) { showErrorMessage('Only admins can save privacy settings'); return; }
+  const visibility = $('visPublic')?.classList.contains('active') ? 'public' : 'private';
+  const invitesRestricted = $('inviteToggle')?.classList.contains('active');
+  const retVal = $('messageRetentionSelect')?.value;
+  let messageRetentionDays = null;
+  if (retVal && retVal !== 'Forever') { const m = retVal.match(/\d+/); if (m) messageRetentionDays = parseInt(m[0], 10); }
+ 
+  const btn = $('savePrivacyBtn');
+  btn.disabled = true; btn.textContent = 'Saving…';
+  try {
+    const r = await fetch(`/api/workspace/${workspaceId}/update-privacy-settings/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCSRFToken() },
+      credentials: 'same-origin',
+      body: JSON.stringify({ visibility, invites_restricted_to_admins: invitesRestricted, message_retention_days: messageRetentionDays })
+    });
+    const data = await r.json();
+    if (r.ok && data.success) {
+      showSuccessMessage('Privacy settings saved!');
+      currentPrivacySettings = data.settings;
+      const msg = $('saveConfirm');
+      if (msg) { msg.classList.add('visible'); setTimeout(() => msg.classList.remove('visible'), 2500); }
+    } else showErrorMessage(data.error || 'Failed to save');
+  } catch { showErrorMessage('Error saving privacy settings'); }
+  finally { btn.disabled = false; btn.textContent = 'Save Changes'; }
+});
+ 
+/* =======================================================
+   DANGER ZONE
+   ======================================================= */
 function loadTransferMembers() {
   const select = $('transferSelect');
   if (!select) return;
-  
-  // Clear existing options (keep the first placeholder)
-  while (select.options.length > 1) {
-    select.remove(1);
+  while (select.options.length > 1) select.remove(1);
+  members.forEach(m => {
+    if (m.role !== 'admin' && m.id !== currentUserId) {
+      const o = document.createElement('option');
+      o.value = m.username; o.textContent = m.display_name || m.username;
+      select.appendChild(o);
+    }
+  });
+}
+ 
+$('transferBtn')?.addEventListener('click', async () => {
+  const target = $('transferSelect').value;
+  if (!target) { showErrorMessage('Select a member'); return; }
+  if (!confirm('Are you sure? You will become a regular member.')) return;
+  const btn = $('transferBtn'); btn.disabled = true; btn.textContent = 'Transferring…';
+  try {
+    const r = await fetch(`/api/workspace/${workspaceId}/transfer-ownership/`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCSRFToken(), 'X-Requested-With': 'XMLHttpRequest' },
+      credentials: 'same-origin', body: JSON.stringify({ target_username: target })
+    });
+    const data = await r.json();
+    if (r.ok && data.success) { showSuccessMessage('Ownership transferred!'); setTimeout(() => location.reload(), 1500); }
+    else { showErrorMessage(data.error || 'Failed'); btn.disabled = false; btn.textContent = 'Transfer'; }
+  } catch { showErrorMessage('Error transferring ownership'); btn.disabled = false; btn.textContent = 'Transfer'; }
+});
+ 
+$('leaveWorkspaceBtn')?.addEventListener('click', async () => {
+  if (!confirm('Are you sure you want to leave?')) return;
+  const btn = $('leaveWorkspaceBtn'); btn.disabled = true; btn.textContent = 'Leaving…';
+  try {
+    const r = await fetch(`/api/workspace/${workspaceId}/leave-workspace/`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCSRFToken(), 'X-Requested-With': 'XMLHttpRequest' },
+      credentials: 'same-origin', body: JSON.stringify({})
+    });
+    const data = await r.json();
+    if (r.ok && data.success) { showSuccessMessage('You left the workspace'); setTimeout(() => location.href = '/profile/', 1500); }
+    else { showErrorMessage(data.error || 'Failed'); btn.disabled = false; btn.textContent = 'Leave Workspace'; }
+  } catch { showErrorMessage('Error leaving'); btn.disabled = false; btn.textContent = 'Leave Workspace'; }
+});
+ 
+$('showDeleteBtn')?.addEventListener('click', () => {
+  $('deleteConfirmArea').style.display = 'block';
+  $('showDeleteBtn').style.display = 'none';
+  const name = document.querySelector('[data-workspace-title]')?.getAttribute('data-workspace-title') || document.querySelector('.ws-selector-name')?.textContent || 'Workspace';
+  $('workspaceNameConfirm').textContent = name;
+});
+$('cancelDeleteBtn')?.addEventListener('click', () => {
+  $('deleteConfirmArea').style.display = 'none';
+  $('showDeleteBtn').style.display = '';
+  $('deleteConfirmInput').value = '';
+  $('confirmDeleteBtn').disabled = true;
+});
+$('deleteConfirmInput')?.addEventListener('input', () => {
+  const name = document.querySelector('[data-workspace-title]')?.getAttribute('data-workspace-title') || document.querySelector('.ws-selector-name')?.textContent || 'Workspace';
+  $('confirmDeleteBtn').disabled = $('deleteConfirmInput').value !== name;
+});
+$('confirmDeleteBtn')?.addEventListener('click', async () => {
+  const name = document.querySelector('[data-workspace-title]')?.getAttribute('data-workspace-title') || document.querySelector('.ws-selector-name')?.textContent || 'Workspace';
+  const btn = $('confirmDeleteBtn'); btn.disabled = true; btn.textContent = 'Deleting…';
+  try {
+    const r = await fetch(`/api/workspace/${workspaceId}/delete-workspace/`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCSRFToken(), 'X-Requested-With': 'XMLHttpRequest' },
+      credentials: 'same-origin', body: JSON.stringify({ title: name })
+    });
+    const data = await r.json();
+    if (r.ok && data.success) { showSuccessMessage('Workspace deleted!'); setTimeout(() => location.href = '/profile/', 1500); }
+    else { showErrorMessage(data.error || 'Failed'); btn.disabled = false; btn.textContent = 'Permanently Delete'; }
+  } catch { showErrorMessage('Error deleting'); btn.disabled = false; btn.textContent = 'Permanently Delete'; }
+});
+ 
+/* =======================================================
+   GLOBAL ESC — closes AI panel (using base_layout's 'visible' class)
+   ======================================================= */
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    document.getElementById('aiPanel')?.classList.remove('visible');
+    document.getElementById('profileOverlay')?.classList.remove('visible');
+    emojiPickerContainer.style.display = 'none';
+    emojiPickerOpen = false;
   }
-  
-  // Add non-admin members to select
-  members.forEach(member => {
-    if (member.role !== 'admin' && member.id !== currentUserId) {
-      const option = document.createElement('option');
-      option.value = member.username;
-      option.textContent = member.display_name || member.username;
-      select.appendChild(option);
-    }
-  });
-}
-
-// Transfer Ownership Button
-if ($('transferBtn')) {
-  $('transferBtn').addEventListener('click', async () => {
-    const targetUsername = $('transferSelect').value;
-    
-    if (!targetUsername) {
-      showErrorMessage('Please select a member');
-      return;
-    }
-    
-    if (!confirm('Are you sure? You will become a regular member.')) {
-      return;
-    }
-    
-    const btn = $('transferBtn');
-    btn.disabled = true;
-    btn.textContent = 'Transferring…';
-    
-    try {
-      const response = await fetch(`/api/workspace/${workspaceId}/transfer-ownership/`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Requested-With': 'XMLHttpRequest',
-          'X-CSRFToken': getCSRFToken()
-        },
-        credentials: 'same-origin',
-        body: JSON.stringify({ target_username: targetUsername })
-      });
-      
-      const data = await response.json();
-      
-      if (response.ok && data.success) {
-        showSuccessMessage('Ownership transferred successfully!');
-        setTimeout(() => {
-          window.location.reload();
-        }, 1500);
-      } else {
-        showErrorMessage(data.error || 'Failed to transfer ownership');
-        btn.disabled = false;
-        btn.textContent = 'Transfer';
-      }
-    } catch (err) {
-      console.error('Error transferring ownership:', err);
-      showErrorMessage('Error transferring ownership');
-      btn.disabled = false;
-      btn.textContent = 'Transfer';
-    }
-  });
-}
-
-// Leave Workspace Button
-if ($('leaveWorkspaceBtn')) {
-  $('leaveWorkspaceBtn').addEventListener('click', async () => {
-    if (!confirm('Are you sure you want to leave this workspace?')) {
-      return;
-    }
-    
-    const btn = $('leaveWorkspaceBtn');
-    btn.disabled = true;
-    btn.textContent = 'Leaving…';
-    
-    try {
-      const response = await fetch(`/api/workspace/${workspaceId}/leave-workspace/`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Requested-With': 'XMLHttpRequest',
-          'X-CSRFToken': getCSRFToken()
-        },
-        credentials: 'same-origin',
-        body: JSON.stringify({})
-      });
-      
-      const data = await response.json();
-      
-      if (response.ok && data.success) {
-        showSuccessMessage('You have left the workspace!');
-        setTimeout(() => {
-          window.location.href = '/profile/';
-        }, 1500);
-      } else {
-        showErrorMessage(data.error || 'Failed to leave workspace');
-        btn.disabled = false;
-        btn.textContent = 'Leave Workspace';
-      }
-    } catch (err) {
-      console.error('Error leaving workspace:', err);
-      showErrorMessage('Error leaving workspace');
-      btn.disabled = false;
-      btn.textContent = 'Leave Workspace';
-    }
-  });
-}
-
-// Delete Workspace
-if ($('showDeleteBtn')) {
-  $('showDeleteBtn').addEventListener('click', () => {
-    $('deleteConfirmArea').style.display = 'block';
-    $('showDeleteBtn').style.display = 'none';
-    // Set the correct workspace name in the confirmation label
-    const workspaceName = document.querySelector('[data-workspace-title]')?.getAttribute('data-workspace-title') || 
-                         document.querySelector('.ws-selector-name')?.textContent || 'Workspace';
-    $('workspaceNameConfirm').textContent = workspaceName;
-  });
-}
-
-if ($('cancelDeleteBtn')) {
-  $('cancelDeleteBtn').addEventListener('click', () => {
-    $('deleteConfirmArea').style.display = 'none';
-    $('showDeleteBtn').style.display = '';
-    $('deleteConfirmInput').value = '';
-    $('confirmDeleteBtn').disabled = true;
-  });
-}
-
-if ($('deleteConfirmInput')) {
-  $('deleteConfirmInput').addEventListener('input', () => {
-    const workspaceName = document.querySelector('[data-workspace-title]')?.getAttribute('data-workspace-title') || 
-                         document.querySelector('.ws-selector-name')?.textContent || 'Workspace';
-    $('confirmDeleteBtn').disabled = $('deleteConfirmInput').value !== workspaceName;
-  });
-}
-
-if ($('confirmDeleteBtn')) {
-  $('confirmDeleteBtn').addEventListener('click', async () => {
-    const workspaceName = document.querySelector('[data-workspace-title]')?.getAttribute('data-workspace-title') || 
-                         document.querySelector('.ws-selector-name')?.textContent || 'Workspace';
-    
-    const btn = $('confirmDeleteBtn');
-    btn.disabled = true;
-    btn.textContent = 'Deleting…';
-    
-    try {
-      const response = await fetch(`/api/workspace/${workspaceId}/delete-workspace/`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Requested-With': 'XMLHttpRequest',
-          'X-CSRFToken': getCSRFToken()
-        },
-        credentials: 'same-origin',
-        body: JSON.stringify({ title: workspaceName })
-      });
-      
-      const data = await response.json();
-      
-      if (response.ok && data.success) {
-        showSuccessMessage('Workspace deleted successfully!');
-        setTimeout(() => {
-          window.location.href = '/profile/';
-        }, 1500);
-      } else {
-        showErrorMessage(data.error || 'Failed to delete workspace');
-        btn.disabled = false;
-        btn.textContent = 'Permanently Delete';
-      }
-    } catch (err) {
-      console.error('Error deleting workspace:', err);
-      showErrorMessage('Error deleting workspace');
-      btn.disabled = false;
-      btn.textContent = 'Permanently Delete';
-    }
-  });
-}
-
-/* ══════════════════════════════════════════════════
-   4. PROFILE MODAL
-══════════════════════════════════════════════════ */
-const profileOverlay = $('profileOverlay');
-
-$('openProfileBtn').addEventListener('click', () => {
-  profileOverlay.classList.add('visible');
 });
-$('profileCloseBtn').addEventListener('click',  closeProfile);
-$('profileCancelBtn').addEventListener('click', closeProfile);
-profileOverlay.addEventListener('click', e => { if (e.target === profileOverlay) closeProfile(); });
-
-function closeProfile() { profileOverlay.classList.remove('visible'); }
-
-// Status selection
-$$('.status-opt').forEach(btn => {
-  btn.addEventListener('click', (e) => {
-    e.preventDefault();
-    $$('.status-opt').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    const status = btn.getAttribute('data-status');
-    const statusInput = document.getElementById('statusInput');
-    if (statusInput) {
-      statusInput.value = status;
-    }
-  });
-});
-
-// Profile save button - only if it exists
-const profileSaveBtn = $('profileSaveBtn');
-if (profileSaveBtn) {
-  profileSaveBtn.addEventListener('click', async () => {
-    const name = $('profileName').value.trim() || 'User';
-    // update sidebar display
-    document.querySelector('.user-name').textContent = name;
-    document.querySelector('.user-av').textContent = initials(name);
-    closeProfile();
-  });
-}
-// --------------------------------------------AIBOT------------------------------------
-const botReplies = [
-//   'Great point! Let me check on that.',
-//   'Thanks for the update, noted ✓',
-//   'Can you share more details?',
-//   'I'll look into it right after standup.',
-//   'Sounds good, I'll sync with the team.',
-//   'That's exactly what I was thinking!',
-//   'Let's schedule a quick review for this.',
-//   'Approved — looks great 🎉',
-];
-
-const botUsers = [
-  { name: 'Sarah Chen' },
-  { name: 'David Kim'  },
-  { name: 'Mia Torres' },
-];
-
-function simulateReply(text) {
-  // typing indicator
-  const typing = document.createElement('div');
-  typing.className = 'typing-indicator';
-  const user = botUsers[Math.floor(Math.random() * botUsers.length)];
-  typing.innerHTML = `
-    <div class="msg-av" style="width:28px;height:28px;font-size:.65rem;background:${avatarColor(user.name)}">${initials(user.name)}</div>
-    <span>${user.name} is typing</span>
-    <div class="typing-dots"><span></span><span></span><span></span></div>
-  `;
-  messagesArea.appendChild(typing);
-  messagesArea.scrollTop = messagesArea.scrollHeight;
-
-  setTimeout(() => {
-    typing.remove();
-    renderMessage({
-      sender: user.name,
-      text: botReplies[Math.floor(Math.random() * botReplies.length)],
-      time: new Date(),
-    }, true);
-    messagesArea.scrollTop = messagesArea.scrollHeight;
-  }, 1500 + Math.random() * 1000);
-}
-
-/* ══════════════════════════════════════════════════
-   5. AI ASSISTANT
-══════════════════════════════════════════════════ */
-const aiPanel    = $('aiPanel');
-const aiFab      = $('aiFab');
-const aiMessages = $('aiMessages');
-
-aiFab.addEventListener('click', () => {
-  aiPanel.classList.toggle('visible');
-});
-$('aiClose').addEventListener('click', () => aiPanel.classList.remove('visible'));
-
-function addAiMsg(text, who = 'ai') {
-  const msg = document.createElement('div');
-  msg.className = `ai-msg ${who}`;
-  msg.innerHTML = `<div class="ai-msg-bubble">${text}</div>`;
-  aiMessages.appendChild(msg);
-  aiMessages.scrollTop = aiMessages.scrollHeight;
-}
-
-function aiThinking() {
-  const el = document.createElement('div');
-  el.className = 'ai-msg ai';
-  el.id = 'aiThinking';
-  el.innerHTML = `<div class="ai-msg-bubble ai-thinking">
-    <div class="typing-dots"><span></span><span></span><span></span></div>
-  </div>`;
-  aiMessages.appendChild(el);
-  aiMessages.scrollTop = aiMessages.scrollHeight;
-  return el;
-}
-
-const aiResponses = {
-  task:    'I can see your team has 8 tasks in the board. 2 are high priority and still in To Do — want me to suggest who to assign them to?',
-  meeting: 'I can summarize the last meeting for you: the team agreed to finalize the dark mode tokens by end of sprint and complete the accessibility review.',
-  design:  'Based on your recent messages, the team is focused on the design system. I can generate a checklist for the handoff if you\'d like.',
-  help:    'I can: summarize meetings, suggest task assignments, check team workload, explain design decisions, or draft messages. What do you need?',
-  default: 'Great question! Based on the workspace activity, I\'d suggest prioritizing the "Redesign onboarding flow" task — it\'s high priority and still in To Do.',
-};
-
-function getAiReply(input) {
-  const lower = input.toLowerCase();
-  if (lower.includes('task') || lower.includes('board')) return aiResponses.task;
-  if (lower.includes('meeting') || lower.includes('summar')) return aiResponses.meeting;
-  if (lower.includes('design') || lower.includes('system')) return aiResponses.design;
-  if (lower.includes('help') || lower.includes('what can')) return aiResponses.help;
-  return aiResponses.default;
-}
-
-async function handleAiSend() {
-  const input = $('aiInput');
-  const text  = input.value.trim();
-  if (!text) return;
-  input.value = '';
-
-  addAiMsg(text, 'user');
-  const thinking = aiThinking();
-
-  await delay(1200 + Math.random() * 600);
-  thinking.remove();
-  addAiMsg(getAiReply(text), 'ai');
-}
-
-$('aiSend').addEventListener('click', handleAiSend);
-$('aiInput').addEventListener('keydown', e => {
-  if (e.key === 'Enter') { e.preventDefault(); handleAiSend(); }
-});
+ 
 
 
 /* ══════════════════════════════════════════════════
