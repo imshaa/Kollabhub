@@ -301,10 +301,42 @@ async function loadAll() {
     if (window.NotificationManager) {
       window.NotificationManager.markRead('taskboard');
     }
+    initSortable();
   } catch(err) {
     showBoardError('Could not load board. ' + err.message);
   }
 }
+
+function initSortable() {
+  if (typeof Sortable === 'undefined') return;
+
+  const containers = $$('.kanban-cards');
+  containers.forEach(el => {
+    Sortable.create(el, {
+      group: 'tasks',
+      animation: 150,
+      ghostClass: 'task-ghost',
+      draggable: '.task-card',
+      onEnd: async (evt) => {
+        const taskId = evt.item.dataset.id;
+        const newListId = evt.to.id.replace('cards-', '');
+        
+        if (evt.from === evt.to && evt.oldIndex === evt.newIndex) return;
+
+        try {
+          await api(`/api/workspace/${WORKSPACE_ID}/tasks/${taskId}/update/`, 'PATCH', {
+            task_list_id: parseInt(newListId, 10)
+          });
+          showToast('Task moved', 'success');
+        } catch (err) {
+          showToast('Move failed: ' + err.message, 'error');
+          renderBoard(); // Revert UI
+        }
+      }
+    });
+  });
+}
+
 
 /* ══════════════════════════════════════════════════════════
    BOARD SETTINGS MODAL
@@ -485,6 +517,8 @@ function renderBoard() {
     addColEl.addEventListener('click', () => openColModal('add'));
     kanban.appendChild(addColEl);
   }
+
+  initSortable();
 }
 
 /* ── Card ─────────────────────────────────────────────────── */
@@ -985,26 +1019,125 @@ $('attachLinkSubmit').addEventListener('click', async () => {
 });
 $('attachLinkCancel').addEventListener('click', () => { $('attachLinkRow').style.display = 'none'; $('attachLinkInput').value = ''; });
 
+async function copyToClipboard(text) {
+  if (!text) return false;
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch (err) {
+    // fallback below
+  }
+  const textarea = document.createElement('textarea');
+  textarea.value = text;
+  textarea.style.position = 'fixed'; textarea.style.opacity = '0';
+  document.body.appendChild(textarea);
+  textarea.focus(); textarea.select();
+  try {
+    document.execCommand('copy');
+    return true;
+  } finally {
+    textarea.remove();
+  }
+}
+
+function normalizeUrl(url) {
+  if (!url) return '';
+  const trimmed = url.trim();
+  if (!trimmed) return '';
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  return `https://${trimmed}`;
+}
+
 function renderAttachments(task) {
   const list = $('attachmentList'); list.innerHTML = '';
   (task.attachments || []).forEach(att => {
     const item = document.createElement('div'); item.className = 'attachment-item';
+    const normalizedLink = att.type === 'link' ? normalizeUrl(att.link_url) : att.url;
     let preview = '';
-    if (att.type === 'image' && att.url)
-      preview = `<div class="att-preview att-preview--image"><img src="${att.url}" alt="${escHtml(att.original_name)}" loading="lazy"/></div>`;
-    else if (att.type === 'video' && att.url)
-      preview = `<div class="att-preview att-preview--video"><video controls preload="metadata" style="max-width:100%;border-radius:6px;"><source src="${att.url}"/></video></div>`;
-    else if (att.type === 'link')
-      preview = `<div class="att-preview att-preview--link"><a href="${escHtml(att.link_url)}" target="_blank" rel="noopener noreferrer">${escHtml(att.link_url)}</a></div>`;
-    else if (att.url) {
+    if (att.type === 'image' && att.url) {
+      preview = `<div class="att-preview att-preview--image" data-open-url="${escHtml(att.url)}"><img src="${att.url}" alt="${escHtml(att.original_name)}" loading="lazy"/></div>`;
+    } else if (att.type === 'video' && att.url) {
+      preview = `<div class="att-preview att-preview--video" data-open-url="${escHtml(att.url)}"><video controls preload="metadata"><source src="${att.url}"/></video></div>`;
+    } else if (att.type === 'link') {
+      preview = `<div class="att-preview att-preview--link"><a href="${escHtml(normalizedLink)}" target="_blank" rel="noopener noreferrer">${escHtml(att.link_url)}</a></div>`;
+    } else if (att.url) {
       const ext = (att.original_name||'').split('.').pop().toUpperCase().slice(0,4);
-      preview = `<div class="att-preview att-preview--doc"><a href="${att.url}" target="_blank" rel="noopener" class="att-doc-link"><span class="att-doc-ext">${ext}</span><span>${escHtml(att.original_name)}</span></a></div>`;
+      preview = `<div class="att-preview att-preview--doc"><a href="${escHtml(att.url)}" target="_blank" rel="noopener" class="att-doc-link"><span class="att-doc-ext">${ext}</span><span>${escHtml(att.original_name)}</span></a></div>`;
+    }
+    const actionButtons = [];
+    if (att.type === 'link' && att.link_url) {
+      actionButtons.push(`<button type="button" class="att-action-btn att-copy-btn" data-copy-url="${escHtml(normalizedLink)}" title="Copy URL" aria-label="Copy link"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 12h8"/><path d="M12 8v8"/><path d="M5 12a7 7 0 0 1 14 0"/></svg></button>`);
+      actionButtons.push(`<button type="button" class="att-action-btn att-open-btn" data-open-url="${escHtml(normalizedLink)}" title="Open link" aria-label="Open link"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6H6V8h6"/><path d="M15 3h6v6"/><path d="M10 14L21 3"/></svg></button>`);
+    }
+    if ((att.type === 'image' || att.type === 'video' || att.type === 'document') && normalizedLink) {
+      actionButtons.push(`<button type="button" class="att-action-btn att-open-btn" data-open-url="${escHtml(normalizedLink)}" title="Open file" aria-label="Open file"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6H6V8h6"/><path d="M15 3h6v6"/><path d="M10 14L21 3"/></svg></button>`);
+      actionButtons.push(`<button type="button" class="att-action-btn att-download-btn" data-download-url="${escHtml(normalizedLink)}" title="Download file" aria-label="Download file"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12"/><path d="m8 11 4 4 4-4"/><path d="M5 19h14"/></svg></button>`);
     }
     const meta = att.type === 'link'
       ? `Link · ${att.uploaded_by||''} · ${fmtTime(att.created_at)}`
       : `${att.type} · ${fmtBytes(att.file_size)} · ${att.uploaded_by||''} · ${fmtTime(att.created_at)}`;
-    item.innerHTML = `${preview}<div class="att-footer"><span class="att-meta">${escHtml(meta)}</span><button class="att-del-btn" data-att-id="${att.id}" title="Remove"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>`;
-    item.querySelector('.att-del-btn').addEventListener('click', async () => {
+    item.innerHTML = `${preview}<div class="att-footer"><span class="att-meta">${escHtml(meta)}</span><div class="att-actions">${actionButtons.join('')}<button class="att-del-btn" data-att-id="${att.id}" title="Remove" aria-label="Remove attachment"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div></div>`;
+
+    const previewContainer = item.querySelector('.att-preview');
+    if (previewContainer && normalizedLink && att.type === 'image') {
+      previewContainer.classList.add('clickable');
+      previewContainer.addEventListener('click', e => {
+        if (e.target.closest('.att-action-btn') || e.target.closest('.att-del-btn')) return;
+        window.open(normalizedLink, '_blank', 'noopener');
+      });
+    }
+
+    item.querySelectorAll('.att-copy-btn').forEach(btn => {
+      btn.addEventListener('click', async e => {
+        e.stopPropagation();
+        const url = btn.dataset.copyUrl;
+        if (!url) return;
+        const ok = await copyToClipboard(url);
+        showToast(ok ? 'Link copied to clipboard' : 'Copy failed', ok ? 'success' : 'error');
+      });
+    });
+
+    item.querySelectorAll('.att-open-btn').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        const url = btn.dataset.openUrl;
+        if (url) window.open(url, '_blank', 'noopener');
+      });
+    });
+
+    item.querySelectorAll('.att-download-btn').forEach(btn => {
+      btn.addEventListener('click', async e => {
+        e.stopPropagation();
+        const url = btn.dataset.downloadUrl;
+        if (!url) return;
+        try {
+          const response = await fetch(url, { credentials: 'same-origin' });
+          if (!response.ok) throw new Error('Download failed');
+          const blob = await response.blob();
+          const blobUrl = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = blobUrl;
+          link.download = att.original_name || '';
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          URL.revokeObjectURL(blobUrl);
+        } catch (err) {
+          const link = document.createElement('a');
+          link.href = url;
+          link.target = '_blank';
+          link.rel = 'noopener';
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+        }
+      });
+    });
+
+    item.querySelector('.att-del-btn').addEventListener('click', async e => {
+      e.stopPropagation();
       if (!confirm('Remove this attachment?')) return;
       try {
         await api(`/api/workspace/${WORKSPACE_ID}/tasks/${openTaskId}/attachments/${att.id}/delete/`, 'POST');

@@ -5,30 +5,39 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>{% block title %}KollabHub{% endblock %}</title>
-  <link rel="stylesheet" href="{% static 'css/main.css' %}"/>
   <link rel="stylesheet" href="{% static 'css/chat.css' %}"/>
-  <link rel="stylesheet" href="{% static 'css/notifications.css' %}"/>
+  <link rel="stylesheet" href="{% static 'css/ai.css' %}"/>
   {% block extra_css %}{% endblock %}
 </head>
 <body>
 <div class="ws-layout">
 
   <aside class="sidebar" id="sidebar">
+    
     <div class="sidebar-top">
-      <button class="ws-selector">
-        <div class="ws-selector-icon" style="display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:50%;background:var(--accent);overflow:hidden;">
-          {% if workspace and workspace.image %}
-            <img src="{{ workspace.image.url }}" alt="Workspace Image" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" />
-          {% else %}
-            <span style="font-weight:700;font-size:1.1em;color:#fff;">{{ workspace.title|default:"P"|slice:":1" }}</span>
-          {% endif %}
+      <div class="ws-selector-wrap">
+        <button type="button" class="ws-selector">
+          <div class="ws-selector-icon" style="display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:50%;background:var(--accent);overflow:hidden;">
+            {% if workspace and workspace.image %}
+              <img src="{{ workspace.image_url }}" alt="Workspace Image" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" />
+            {% else %}
+              <span style="font-weight:700;font-size:1.1em;color:#fff;">{{ workspace.title|default:"P"|slice:":1" }}</span>
+            {% endif %}
+          </div>
+          <span class="ws-selector-name">{{ workspace.title|default:"Workspace" }}</span>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <div class="ws-selector-actions">
+          <button type="button" class="ws-selector-action" data-action="edit-workspace">Edit Workspace</button>
         </div>
-        <span class="ws-selector-name">{{ workspace.title|default:"Workspace" }}</span>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
-      </button>
+      </div>
     </div>
 
     <nav class="sidebar-nav">
+      <a href="{% url 'workspace' %}" class="nav-item {% block nav_workspaces %}{% endblock %}" id="workspaceNavBtn">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+        Workspaces
+      </a>
       {% if workspace %}
       <a href="{% url 'chatui' workspace.id %}" class="nav-item {% block nav_chat %}{% endblock %}" id="chatNavBtn">
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
@@ -43,11 +52,15 @@
         Tasks
         <span class="badge nav-badge" id="taskNavBadge" style="display:none;"></span>
       </a>
-      {% endif %}
-      <button class="nav-item {% block nav_settings %}{% endblock %}" data-view="settings" id="settingsNavBtn">
+      <a href="{% url 'profile' %}?workspace_id={{ workspace.id }}" class="nav-item {% block nav_settings %}{% endblock %}" id="settingsNavBtn">
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93A10 10 0 1 0 4.93 19.07 10 10 0 0 0 19.07 4.93z"/></svg>
         Settings
-      </button>
+      </a>
+      <a href="{% url 'ai_page' workspace.id %}" class="nav-item {% block nav_ai %}{% endblock %}" id="aiNavBtn">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>
+        AI Chat
+      </a>
+      {% endif %}
     </nav>
 
     <div class="sidebar-section">
@@ -77,10 +90,10 @@
     </div>
 
     <div class="sidebar-footer">
-      <div class="user-info" id="openProfileBtn">
+      <a href="{% url 'profile' %}?workspace_id={{ workspace.id }}" class="user-info" id="openProfileBtn" style="text-decoration:none; color:inherit;">
         <div class="user-avatar-wrap">
           {% if request.user.profile_picture %}
-            <img src="{{ request.user.profile_picture.url }}" alt="{{ request.user.display_name|default:request.user.username }}" class="user-av" style="width:30px;height:30px;border-radius:50%;object-fit:cover;" />
+            <img src="{{ request.user.profile_picture_url }}" alt="{{ request.user.display_name|default:request.user.username }}" class="user-av" style="width:30px;height:30px;border-radius:50%;object-fit:cover;" />
           {% else %}
             <div class="user-av">{{ request.user.username|first|upper }}</div>
           {% endif %}
@@ -88,12 +101,12 @@
         </div>
         <div class="user-meta">
           <span class="user-name">{{ request.user.display_name|default:request.user.username }}</span>
-          <span class="user-status-text">Edit Profile</span>
+          <span class="user-status-text">Settings &amp; Profile</span>
         </div>
-      </div>
-      <button class="icon-btn" title="Settings" id="sidebarSettingsBtn">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93A10 10 0 1 0 4.93 19.07 10 10 0 0 0 19.07 4.93z"/></svg>
-      </button>
+      </a>
+      <a href="{% url 'logout' %}" class="icon-btn" title="Sign Out" id="sidebarLogoutBtn">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+      </a>
     </div>
   </aside>
 
@@ -101,103 +114,54 @@
     {% block main_content %}{% endblock %}
   </div>
 
+  <!-- Floating AI Assistant -->
+  <div class="ai-overlay" id="aiOverlay"></div>
   <button class="ai-fab" id="aiFab" title="Kollab AI">
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z" />
+    </svg>
   </button>
-
   <div class="ai-panel" id="aiPanel">
     <div class="ai-panel-header">
       <div class="ai-header-info">
         <div class="ai-avatar">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 8V4H8" /><rect width="16" height="12" x="4" y="8" rx="2" /><path d="M2 14h2" /><path d="M20 14h2" /><path d="M15 13v2" /><path d="M9 13v2" />
+          </svg>
         </div>
         <div>
           <p class="ai-name">Kollab AI</p>
           <p class="ai-tagline">Always here to help</p>
         </div>
       </div>
-      <button class="icon-btn" id="aiClose">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-      </button>
+      <div class="ai-header-actions">
+        <button class="icon-btn" id="aiExpand" title="Toggle Size">
+          <svg class="expand-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
+          </svg>
+        </button>
+        <button class="icon-btn" id="aiClose">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
+      </div>
     </div>
     <div class="ai-messages" id="aiMessages">
       <div class="ai-msg ai">
-        <div class="ai-msg-bubble">Hi! I can help you summarize meetings, suggest tasks, or optimize your workflow. What do you need?</div>
+        <div class="ai-msg-bubble">Hi! How can I help you optimize your workflow?</div>
       </div>
     </div>
     <div class="ai-input-wrap">
-      <input type="text" id="aiInput" class="ai-input" placeholder="Ask Kollab AI anything…"/>
+      <input type="text" id="aiInput" class="ai-input" placeholder="Ask Kollab AI anything…" />
       <button class="ai-send" id="aiSend">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <path d="m22 2-7 20-4-9-9-4Z" /><path d="M22 2 11 13" />
+        </svg>
       </button>
     </div>
   </div>
 
-</div>
-
-<!-- PROFILE MODAL -->
-<div class="overlay" id="profileOverlay">
-  <div class="modal modal--narrow" role="dialog" aria-modal="true">
-    <form method="POST" action="{% url 'update_profile' %}" enctype="multipart/form-data">
-      {% csrf_token %}
-      <div class="join-header">
-        <div>
-          <h2>Edit Profile</h2>
-          <p class="modal-subtitle">Update your personal details</p>
-        </div>
-        <button type="button" class="icon-close" id="profileCloseBtn">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-        </button>
-      </div>
-      <div class="form-card">
-        <div class="profile-av-wrap">
-          {% if user.profile_picture %}
-            <img src="{{ user.profile_picture.url }}" class="profile-av" alt="Profile Picture" />
-          {% else %}
-            <div class="profile-av">{{ user.username|first|upper }}</div>
-          {% endif %}
-          <label for="fileUpload" style="cursor:pointer;color:var(--accent);font-size:0.8rem;font-weight:500;">Change Avatar</label>
-          <input type="file" id="fileUpload" name="fileUpload" accept="image/*" style="display:none;">
-        </div>
-        <div class="form-group">
-          <label for="profileUsername">Username</label>
-          <div class="input-wrapper">
-            <input type="text" id="profileUsername" name="username" value="{{ user.username }}" required>
-          </div>
-        </div>
-        <div class="form-group">
-          <label for="profileName">Display Name</label>
-          <div class="input-wrapper">
-            <input type="text" id="profileName" name="displayName" value="{{ user.display_name }}" required>
-          </div>
-        </div>
-        <div class="form-group">
-          <label>Email</label>
-          <div class="input-wrapper">
-            <input type="email" value="{{ user.email }}" readonly>
-          </div>
-        </div>
-        <div class="form-group">
-          <label for="bioTextarea">Bio</label>
-          <textarea id="bioTextarea" name="bio" maxlength="225" placeholder="Tell us about yourself...">{{ user.bio }}</textarea>
-        </div>
-        <div class="form-group">
-          <label>Status</label>
-          <div class="status-opts">
-            <button type="button" class="status-opt {% if user.status == 'online' %}active{% endif %}" data-status="online"><span class="status-dot online"></span>Online</button>
-            <button type="button" class="status-opt {% if user.status == 'away' %}active{% endif %}" data-status="away"><span class="status-dot away"></span>Away</button>
-            <button type="button" class="status-opt {% if user.status == 'busy' %}active{% endif %}" data-status="busy"><span class="status-dot busy"></span>Busy</button>
-            <button type="button" class="status-opt {% if user.status == 'offline' %}active{% endif %}" data-status="offline"><span class="status-dot offline"></span>Offline</button>
-          </div>
-          <input type="hidden" name="status" id="statusInput" value="{{ user.status }}">
-        </div>
-        <div class="modal-actions">
-          <button type="button" class="btn-cancel" id="profileCancelBtn">Cancel</button>
-          <button type="submit" class="btn-primary">Save Profile</button>
-        </div>
-      </div>
-    </form>
-  </div>
 </div>
 
 {% block page_modals %}{% endblock %}
@@ -221,92 +185,7 @@
   window.INITIAL_NOTIFICATION_COUNTS = _d.notificationCounts || null;
 })();
 
-/* ── AI Panel ──────────────────────────────────────────────────────────────── */
-(function () {
-  var fab   = document.getElementById('aiFab');
-  var panel = document.getElementById('aiPanel');
-  var close = document.getElementById('aiClose');
-  var input = document.getElementById('aiInput');
-  var send  = document.getElementById('aiSend');
-  var msgs  = document.getElementById('aiMessages');
-
-  if (fab)   fab.addEventListener('click', function(e){ e.stopPropagation(); panel.classList.toggle('visible'); });
-  if (close) close.addEventListener('click', function(){ panel.classList.remove('visible'); });
-  document.addEventListener('click', function(e){
-    if (panel && panel.classList.contains('visible') && !panel.contains(e.target) && e.target !== fab)
-      panel.classList.remove('visible');
-  });
-
-  function appendMsg(text, role) {
-    var d = document.createElement('div');
-    d.className = 'ai-msg ' + role;
-    d.innerHTML = '<div class="ai-msg-bubble">' + text.replace(/</g,'&lt;') + '</div>';
-    if (msgs) { msgs.appendChild(d); msgs.scrollTop = msgs.scrollHeight; }
-  }
-
-  function doSend() {
-    var text = input && input.value && input.value.trim();
-    if (!text) return;
-    appendMsg(text, 'user');
-    input.value = '';
-    var tid = 'ty' + Date.now();
-    var t = document.createElement('div');
-    t.className = 'ai-msg ai'; t.id = tid;
-    t.innerHTML = '<div class="ai-msg-bubble" style="opacity:.5;font-style:italic;">Thinking…</div>';
-    if (msgs) { msgs.appendChild(t); msgs.scrollTop = msgs.scrollHeight; }
-    fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514', max_tokens: 1000,
-        system: 'You are Kollab AI, a helpful assistant inside KollabHub, a team collaboration app.',
-        messages: [{ role: 'user', content: text }]
-      })
-    }).then(function(r){ return r.json(); }).then(function(data){
-      var el = document.getElementById(tid); if (el) el.remove();
-      appendMsg((data && data.content && data.content[0] && data.content[0].text) || 'Sorry, try again.', 'ai');
-    }).catch(function(){
-      var el = document.getElementById(tid); if (el) el.remove();
-      appendMsg('Connection issue. Please try again.', 'ai');
-    });
-  }
-  if (send) send.addEventListener('click', doSend);
-  if (input) input.addEventListener('keydown', function(e){ if (e.key === 'Enter') doSend(); });
-})();
-
-/* ── Profile Modal ─────────────────────────────────────────────────────────── */
-(function () {
-  var overlay = document.getElementById('profileOverlay');
-  function openFn()  { if (overlay) overlay.classList.add('visible'); }
-  function closeFn() { if (overlay) overlay.classList.remove('visible'); }
-  var openBtn   = document.getElementById('openProfileBtn');
-  var closeBtn  = document.getElementById('profileCloseBtn');
-  var cancelBtn = document.getElementById('profileCancelBtn');
-  if (openBtn)   openBtn.addEventListener('click', openFn);
-  if (closeBtn)  closeBtn.addEventListener('click', closeFn);
-  if (cancelBtn) cancelBtn.addEventListener('click', closeFn);
-  if (overlay)   overlay.addEventListener('click', function(e){ if (e.target === overlay) closeFn(); });
-  document.querySelectorAll('.status-opt').forEach(function(btn){
-    btn.addEventListener('click', function(){
-      document.querySelectorAll('.status-opt').forEach(function(b){ b.classList.remove('active'); });
-      btn.classList.add('active');
-      var si = document.getElementById('statusInput');
-      if (si) si.value = btn.dataset.status;
-    });
-  });
-})();
-
-/* ── Settings nav ──────────────────────────────────────────────────────────── */
-document.getElementById('settingsNavBtn') && document.getElementById('settingsNavBtn').addEventListener('click', function(){
-  var vs = document.getElementById('view-settings');
-  var vc = document.getElementById('view-chat');
-  if (vs) {
-    vs.classList.add('active');
-    if (vc) vc.classList.remove('active');
-    document.querySelectorAll('.sidebar-nav .nav-item').forEach(function(n){ n.classList.remove('active'); });
-    document.getElementById('settingsNavBtn').classList.add('active');
-  }
-});
+/* AI Module loaded via ai.js */
 
 /* ── Channel List ──────────────────────────────────────────────────────────── */
 (function () {
@@ -563,12 +442,15 @@ window.NotificationManager = (function () {
 
 })();
 
+
+
 /* ── Boot NotificationManager after DOM is ready ───────────────────────────── */
 document.addEventListener('DOMContentLoaded', function(){
   window.NotificationManager.init();
 });
 </script>
 
+<script src="{% static 'js/ai.js' %}"></script>
 {% block extra_js %}{% endblock %}
 </body>
 </html>

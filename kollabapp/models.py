@@ -3,6 +3,8 @@ from django.contrib.auth.models import AbstractUser
 from django.conf import settings
 import uuid
 
+from .supabase_storage import create_signed_url
+
 
 class CustomUser(AbstractUser):
     email = models.EmailField(unique=True)
@@ -12,7 +14,7 @@ class CustomUser(AbstractUser):
     #  Replacing description with bio
     bio = models.TextField(max_length=225, blank=True, null=True)
 
-    profile_picture = models.ImageField(upload_to="profile_pics/", blank=True, null=True)
+    profile_picture = models.CharField(max_length=500, blank=True, default="")
 
     STATUS_CHOICES = (
         ("online", "Online"),
@@ -29,6 +31,10 @@ class CustomUser(AbstractUser):
 
     def __str__(self):
         return self.username
+
+    @property
+    def profile_picture_url(self):
+        return create_signed_url(self.profile_picture) if self.profile_picture else None
 
 class Workspace(models.Model):
 
@@ -48,7 +54,7 @@ class Workspace(models.Model):
         default="public"
     )
 
-    image = models.ImageField(upload_to="workspace_pics/", blank=True, null=True)
+    image = models.CharField(max_length=500, blank=True, default="")
 
     admin = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -68,7 +74,10 @@ class Workspace(models.Model):
     def __str__(self):
         return self.title
     
-
+    
+    @property
+    def image_url(self):
+        return create_signed_url(self.image) if self.image else None
 
 
 class WorkspaceMembership(models.Model):
@@ -239,8 +248,8 @@ class TaskAttachment(models.Model):
  
     # Limits (bytes)
     IMAGE_MAX    = 1  * 1024 * 1024   #  1 MB
-    VIDEO_MAX    = 25 * 1024 * 1024   # 25 MB
-    DOC_MAX      = 20 * 1024 * 1024   # 20 MB
+    VIDEO_MAX    = 10 * 1024 * 1024   # 10 MB
+    DOC_MAX      = 5  * 1024 * 1024   #  5 MB
 
     IMAGE_COUNT_MAX    = 10
     VIDEO_COUNT_MAX    = 5
@@ -251,11 +260,15 @@ class TaskAttachment(models.Model):
     uploaded_by   = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
                                       null=True, related_name="task_attachments")
     attachment_type = models.CharField(max_length=10, choices=ATTACHMENT_TYPES)
-    file          = models.FileField(upload_to="task_attachments/", null=True, blank=True)
+    file          = models.CharField(max_length=500, blank=True, default="")
     link_url      = models.URLField(max_length=500, blank=True, default="")
     original_name = models.CharField(max_length=255, blank=True, default="")
     file_size     = models.PositiveIntegerField(default=0)    # bytes
     created_at    = models.DateTimeField(auto_now_add=True)
+ 
+    @property
+    def url(self):
+        return create_signed_url(self.file) if self.file else None
  
     class Meta:
         ordering = ["created_at"]

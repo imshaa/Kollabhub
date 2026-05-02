@@ -5,6 +5,8 @@ from django.views.decorators.http import require_POST, require_GET
 from django.contrib import messages
 from django.contrib import messages as django_messages
 from django.contrib.auth.decorators import login_required
+from pathlib import Path
+from .supabase_storage import build_storage_path, create_signed_url, delete_file, upload_file
 from .models import CustomUser
 from .models import Workspace
 from .models import WorkspaceMembership
@@ -23,6 +25,13 @@ from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 
 User = get_user_model()  # This gets CustomUser
+
+ALLOWED_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg"}
+ALLOWED_VIDEO_EXTENSIONS = {".mp4", ".mp3"}
+ALLOWED_DOC_EXTENSIONS = {".docx", ".pdf", ".doc", ".txt"}
+
+def _has_allowed_extension(filename, allowed_extensions):
+    return Path(filename).suffix.lower() in allowed_extensions
 
 
 # ------------------------- signup View/Login/Logout ----------------------------------
@@ -44,15 +53,14 @@ def signup_view(request):
 
         user = CustomUser.objects.create_user(username=username, email=email, password=password)
         login(request, user)
-        return redirect("profile")
+        return redirect("workspace")
 
     return render(request, "signup.html")
 
 
 def login_view(request):
-    # if already logged in, send to profile/home
     if request.user.is_authenticated:
-        return redirect("profile")
+        return redirect("workspace")
 
     if request.method == "POST":
         username = request.POST.get("username")
@@ -62,7 +70,7 @@ def login_view(request):
 
         if user is not None:
             login(request, user)
-            return redirect("profile")
+            return redirect("workspace")
         else:
             return render(request, "login.html", {"error": "Invalid username or password"})
 
@@ -78,13 +86,39 @@ def logout_view(request):
 
 @login_required
 def profile(request):
-    # display workspace grid and profile modal (no creation form any more)
+    """
+    Settings View – accessible from inside a workspace via ?workspace_id=X.
+    Without workspace_id, redirects to workspace list so user picks a workspace first.
+    """
     user = request.user
+    workspace_id = request.GET.get("workspace_id")
+
+    # Settings only makes sense in context of a workspace.
+    # If no workspace_id given, send to workspace list.
+    if not workspace_id:
+        return redirect("workspace")
+
+    workspace = get_object_or_404(Workspace, id=workspace_id)
+
+    # Membership check
     memberships = WorkspaceMembership.objects.filter(user=user).select_related("workspace")
-    workspaces = [m.workspace for m in memberships]
-    return render(request, "profile.html", {
+    user_membership = WorkspaceMembership.objects.filter(workspace=workspace, user=user).first()
+    if not user_membership:
+        messages.error(request, "You are not a member of this workspace.")
+        return redirect("workspace")
+
+    is_admin = (user_membership.role == "admin")
+
+    # dm_members needed by base_layout sidebar
+    members = WorkspaceMembership.objects.filter(workspace=workspace).select_related("user")
+    dm_members = members.exclude(user=user)
+
+    return render(request, "settings.html", {
         "user": user,
-        "workspaces": workspaces,
+        "workspace": workspace,
+        "is_admin": is_admin,
+        "members": members,
+        "dm_members": dm_members,
     })
 
 
@@ -119,7 +153,15 @@ def update_profile(request):
             if profile_picture.size > TaskAttachment.IMAGE_MAX:
                 messages.error(request, "Profile image must be under 1 MB.")
                 return redirect(request.META.get("HTTP_REFERER", "profile"))
-            user.profile_picture = profile_picture
+            if not _has_allowed_extension(profile_picture.name, ALLOWED_IMAGE_EXTENSIONS):
+                messages.error(request, "Profile image must be a PNG or JPG file.")
+                return redirect(request.META.get("HTTP_REFERER", "profile"))
+            old_path = user.profile_picture
+            new_path = build_storage_path("profiles", profile_picture.name)
+            upload_file(new_path, profile_picture, profile_picture.content_type)
+            if old_path:
+                delete_file(old_path)
+            user.profile_picture = new_path
 
         user.save()
         return redirect(request.META.get("HTTP_REFERER", "profile"))
@@ -149,7 +191,7 @@ def chatui(request, workspace_id):
 
     if not membership:
         messages.error(request, "You are not part of this workspace.")
-        return redirect("profile")
+        return redirect("workspace")
 
     workspace = membership.workspace
 
@@ -170,6 +212,39 @@ def chatui(request, workspace_id):
         "notification_counts_json": json.dumps(notification_counts),
     })
 
+@login_required
+def ai_page(request, workspace_id):
+    membership = WorkspaceMembership.objects.filter(
+        user=request.user, workspace_id=workspace_id
+    ).first()
+
+    if not membership:
+        messages.error(request, "You are not part of this workspace.")
+        return redirect("workspace")
+
+    workspace = membership.workspace
+
+    members = WorkspaceMembership.objects.filter(
+        workspace=workspace
+    ).select_related("user")
+
+    # exclude yourself from DM list
+    dm_members = members.exclude(user=request.user)
+
+    notification_counts = _get_notification_counts(workspace, request.user)
+
+    return render(request, "ai.html", {
+        "workspace": workspace,
+        "members": members,
+        "dm_members": dm_members,
+        "notification_counts": notification_counts,
+        "notification_counts_json": json.dumps(notification_counts),
+        "is_ai_page": True,
+        "base_template": "base_layout.html",
+    })
+
+
+
 # ------------------------------ Workspace logic---------------------------
 @login_required
 def workspace(request):
@@ -186,15 +261,18 @@ def workspace(request):
         # Required fields validation
         if not title:
             messages.error(request, "Workspace title is required.")
-            return redirect("profile")
+            return redirect("workspace")
 
-        if not image:
-            messages.error(request, "Workspace image is required.")
-            return redirect("profile")
-
-        if image.size > TaskAttachment.IMAGE_MAX:
-            messages.error(request, "Workspace image must be under 1 MB.")
-            return redirect("profile")
+        image_path = None
+        if image:
+            if image.size > TaskAttachment.IMAGE_MAX:
+                messages.error(request, "Workspace image must be under 1 MB.")
+                return redirect("workspace")
+            if not _has_allowed_extension(image.name, ALLOWED_IMAGE_EXTENSIONS):
+                messages.error(request, "Workspace image must be a PNG or JPG file.")
+                return redirect("workspace")
+            image_path = build_storage_path("workspace_images", image.name)
+            upload_file(image_path, image, image.content_type)
 
         # NEW LIMIT: max 50 workspaces total (admin + member)
         total_memberships = WorkspaceMembership.objects.filter(
@@ -203,7 +281,7 @@ def workspace(request):
 
         if total_memberships >= 50:
             messages.error(request, "You cannot be part of more than 50 workspaces.")
-            return redirect("profile")
+            return redirect("workspace")
 
         workspace, created = Workspace.objects.get_or_create(
             title=title,
@@ -213,7 +291,7 @@ def workspace(request):
                 "description": description,
                 "team_email": team_email if team_email else None,
                 "visibility": visibility,
-                "image": image,
+                "image": image_path or "",
             },
         )
 
@@ -223,9 +301,11 @@ def workspace(request):
             workspace.team_email = team_email if team_email else None
             workspace.visibility = visibility
 
-            if image:
-                workspace.image.delete(save=False)
-                workspace.image = image
+            if image_path:
+                old_path = workspace.image
+                workspace.image = image_path
+                if old_path:
+                    delete_file(old_path)
 
             workspace.save()
         else:
@@ -237,7 +317,60 @@ def workspace(request):
 
         return redirect("chatui", workspace_id=workspace.id)
 
-    return redirect("profile")
+    # GET request: Show workspace hub
+    memberships = WorkspaceMembership.objects.filter(user=request.user).select_related("workspace")
+    workspaces = [m.workspace for m in memberships]
+    
+    return render(request, "workspace.html", {
+        "workspaces": workspaces,
+        "user": request.user
+    })
+
+
+@login_required
+@require_POST
+def update_workspace_info(request, workspace_id):
+    workspace = get_object_or_404(Workspace, id=workspace_id)
+    if not _is_admin(workspace, request.user):
+        return JsonResponse({"error": "Permission denied."}, status=403)
+
+    title = request.POST.get("title", "").strip()
+    display_name = request.POST.get("display_name", "").strip()
+    image = request.FILES.get("fileUpload")
+    changed = False
+
+    if title and title != workspace.title:
+        if Workspace.objects.filter(admin=request.user, title=title).exclude(pk=workspace.pk).exists():
+            return JsonResponse({"error": "You already have a workspace with that title."}, status=400)
+        workspace.title = title
+        changed = True
+
+    if display_name != (workspace.display_name or ""):
+        workspace.display_name = display_name if display_name else None
+        changed = True
+
+    if image:
+        if image.size > TaskAttachment.IMAGE_MAX:
+            return JsonResponse({"error": "Workspace image must be under 1 MB."}, status=400)
+        if not _has_allowed_extension(image.name, ALLOWED_IMAGE_EXTENSIONS):
+            return JsonResponse({"error": "Workspace image must be a PNG or JPG file."}, status=400)
+        new_path = build_storage_path("workspace_images", image.name)
+        upload_file(new_path, image, image.content_type)
+        if workspace.image:
+            delete_file(workspace.image)
+        workspace.image = new_path
+        changed = True
+
+    if not changed:
+        return JsonResponse({"error": "No changes were submitted."}, status=400)
+
+    workspace.save()
+    return JsonResponse({
+        "success": True,
+        "title": workspace.title,
+        "display_name": workspace.display_name or "",
+        "image_url": workspace.image_url,
+    })
 
 
 # Joining members to a workspace
@@ -577,7 +710,7 @@ def messages_api(request, workspace_id):
             'sender_id': m.sender.id if m.sender else None,
             'sender_username': m.sender.username if m.sender else None,
             'sender_display_name': getattr(m.sender, 'display_name', None) if m.sender else None,
-            'sender_avatar': m.sender.profile_picture.url if (m.sender and m.sender.profile_picture) else '/static/Areeba.jpeg',
+            'sender_avatar': m.sender.profile_picture_url if (m.sender and m.sender.profile_picture) else '/static/Areeba.jpeg',
             'created_at': m.created_at.isoformat(),
         })
 
@@ -592,7 +725,7 @@ def profile_api(request):
         "display_name": user.display_name,
         "bio": user.bio,
         "status": user.status,
-        "profile_picture": user.profile_picture.url if user.profile_picture else "",
+        "profile_picture": user.profile_picture_url or "",
     }
     return JsonResponse(data)
 
@@ -677,7 +810,7 @@ def members_api(request, workspace_id):
                 "display_name": m.user.display_name or m.user.username,
                 "role": m.role,
                 "status": m.user.status,
-                "avatar": m.user.profile_picture.url if m.user.profile_picture else None,
+                "avatar": m.user.profile_picture_url if m.user.profile_picture else None,
             }
             for m in members_list
         ]
@@ -1392,7 +1525,7 @@ def _serialize_task(task):
             "original_name": a.original_name,
             "file_size":     a.file_size,
             "link_url":      a.link_url,
-            "url":           a.file.url if a.file else None,
+            "url":           a.url,
             "uploaded_by":   (a.uploaded_by.display_name or a.uploaded_by.username) if a.uploaded_by else None,
             "created_at":    a.created_at.isoformat(),
         })
@@ -1400,7 +1533,7 @@ def _serialize_task(task):
         cmt_list.append({
             "id":           c.id,
             "author":       c.author.display_name or c.author.username,
-            "author_avatar": c.author.profile_picture.url if c.author.profile_picture else None,
+            "author_avatar": c.author.profile_picture_url if c.author.profile_picture else None,
             "text":         c.text,
             "created_at":   c.created_at.isoformat(),
         })
@@ -1851,6 +1984,8 @@ def task_attachment_upload(request, workspace_id, task_id):
         url = request.POST.get("url", "").strip()
         if not url:
             return JsonResponse({"error": "URL is required"}, status=400)
+        if not url.lower().startswith(("http://", "https://")):
+            url = f"https://{url}"
         current_links = task.attachments.filter(attachment_type="link").count()
         if current_links >= TaskAttachment.LINK_COUNT_MAX:
             return JsonResponse({"error": "Each task can have at most 5 links."}, status=400)
@@ -1890,16 +2025,29 @@ def task_attachment_upload(request, workspace_id, task_id):
                       f"(your file is {file.size/(1024*1024):.1f} MB)"},
             status=400
         )
- 
+
+    allowed_extensions = {
+        "image": ALLOWED_IMAGE_EXTENSIONS,
+        "video": ALLOWED_VIDEO_EXTENSIONS,
+        "document": ALLOWED_DOC_EXTENSIONS,
+    }.get(att_type, ALLOWED_DOC_EXTENSIONS)
+
+    if not _has_allowed_extension(file.name, allowed_extensions):
+        return JsonResponse({"error": f"Invalid {att_type} file type."}, status=400)
+
+    storage_folder = f"task_attachments/{task.workspace_id}/{task.id}"
+    file_path = build_storage_path(storage_folder, file.name)
+    upload_file(file_path, file, file.content_type)
+
     att = TaskAttachment.objects.create(
         task=task, uploaded_by=request.user,
-        attachment_type=att_type, file=file,
+        attachment_type=att_type, file=file_path,
         original_name=file.name, file_size=file.size,
     )
     return JsonResponse({"success": True, "attachment": {
         "id": att.id, "type": att.attachment_type,
         "original_name": att.original_name, "file_size": att.file_size,
-        "link_url": "", "url": att.file.url,
+        "link_url": "", "url": att.url,
         "uploaded_by": request.user.display_name or request.user.username,
         "created_at": att.created_at.isoformat(),
     }})
@@ -1916,8 +2064,7 @@ def task_attachment_delete(request, workspace_id, task_id, att_id):
     if att.uploaded_by_id != request.user.id and not _is_admin(workspace, request.user):
         return JsonResponse({"error": "Permission denied."}, status=403)
     if att.file:
-        try: att.file.delete(save=False)
-        except Exception: pass
+        delete_file(att.file)
     att.delete()
     return JsonResponse({"success": True})
  
@@ -1950,7 +2097,7 @@ def task_comment_create(request, workspace_id, task_id):
     comment_payload = {
         "id": c.id,
         "author": c.author.display_name or c.author.username,
-        "author_avatar": c.author.profile_picture.url if c.author.profile_picture else None,
+        "author_avatar": c.author.profile_picture_url if c.author.profile_picture else None,
         "text": c.text,
         "created_at": c.created_at.isoformat(),
     }

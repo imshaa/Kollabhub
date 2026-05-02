@@ -205,7 +205,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
         user = self.scope["user"]
         avatar_url = "/static/Areeba.jpeg"
         if user.profile_picture:
-            avatar_url = user.profile_picture.url
+            avatar_url = user.profile_picture_url
         return {
             'display_name': user.display_name,
             'avatar_url': avatar_url

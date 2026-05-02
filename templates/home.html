@@ -5,46 +5,41 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>KollabHub - Unified Digital Workspace</title>
-
-    <!-- Django Static CSS -->
-     <link rel="stylesheet" href="{% static 'css/main.css' %}">
+    <link rel="stylesheet" href="{% static 'css/main.css' %}">
     <link rel="stylesheet" href="{% static 'css/home.css' %}">
-
-    <!-- Google Fonts -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
 </head>
+
 <body>
 
+<!-- Header -->
+<header class="header">
+    <div class="container header-content">
+        <a href="{% url 'home' %}" class="logo-link">
+            <div class="logo-icon">K</div>
+            <span class="logo-text">Kollab<span class="logo-accent">Hub</span></span>
+        </a>
 
- <!-- Header -->
-    <header class="header">
-        <div class="container header-content">
-            <a href="{% url 'home' %}" class="logo-link">
-                <div class="logo-icon">K</div>
-                <span class="logo-text">Kollab<span class="logo-accent">Hub</span></span>
-            </a>
+        <nav class="nav-menu">
+            <a href="{% url 'home' %}" class="nav-link">Home</a>
+            <a href="#features" class="nav-link">Features</a>
+            <a href="#" class="nav-link">AI Assistant</a>
+            <a href="#" class="nav-link">Pricing</a>
+            <a href="#" class="nav-link">About</a>
+        </nav>
 
-            <nav class="nav-menu">
-                <a href="{% url 'home' %}" class="nav-link">Home</a>
-                <a href="#features" class="nav-link">Features</a>
-                <a href="#" class="nav-link">AI Assistant</a>
-                <a href="#" class="nav-link">Pricing</a>
-                <a href="#" class="nav-link">About</a>
-            </nav>
-
-            <div class="header-actions">
+        <div class="header-actions">
+            {% if user.is_authenticated %}
+                <a href="{% url 'workspace' %}" class="btn btn-primary">Open Workspaces</a>
+                <a href="{% url 'logout' %}" class="btn btn-outline">Sign Out</a>
+            {% else %}
                 <a href="{% url 'login' %}" class="btn btn-outline">Sign In</a>
                 <a href="{% url 'signup' %}" class="btn btn-primary">Get Started</a>
-            </div>
+            {% endif %}
         </div>
-    </header>
+    </div>
+</header>
 
-
-
-
-<!-- ================= HERO SECTION ================= -->
+<!-- HERO SECTION -->
 <section class="hero">
     <div class="hero-bg">
         <div class="hero-glow hero-glow-right"></div>
@@ -53,7 +48,6 @@
 
     <div class="container hero-content">
         <div class="hero-left">
-
             <div class="hero-badge">
                 <span>AI-Powered Collaboration 2.0</span>
             </div>
@@ -70,23 +64,15 @@
 
             <div class="hero-buttons">
                 {% if user.is_authenticated %}
-                    <a href="{% url 'profile' %}" class="btn btn-primary btn-lg">
-                        Go to Workspace
-                    </a>
+                    <a href="{% url 'workspace' %}" class="btn btn-primary btn-lg">Go to Workspace</a>
                 {% else %}
-                    <a href="{% url 'signup' %}" class="btn btn-primary btn-lg">
-                        Get Started
-                    </a>
+                    <a href="{% url 'signup' %}" class="btn btn-primary btn-lg">Get Started</a>
                 {% endif %}
-
-                <a href="#overview" class="btn btn-outline btn-lg">
-                    Watch Demo
-                </a>
+                <a href="#overview" class="btn btn-outline btn-lg">Watch Demo</a>
             </div>
         </div>
 
         <div class="hero-right">
-            <!-- (Kept your entire visual structure exactly same) -->
             <div class="hero-visual">
                 <div class="browser-chrome">
                     <div class="browser-dot browser-dot-red"></div>
@@ -94,7 +80,6 @@
                     <div class="browser-dot browser-dot-green"></div>
                     <div class="browser-bar"></div>
                 </div>
-
                 <div class="visual-content">
                     <div class="ai-bubble">
                         <div class="ai-avatar">AI</div>
@@ -110,34 +95,26 @@
     </div>
 </section>
 
-<!-- ================= FEATURES ================= -->
+<!-- FEATURES -->
 <section id="features" class="features">
     <div class="container">
         <div class="features-header">
-            <h2 class="features-title">
-                What <span class="text-gradient">KollabHub</span> Does
-            </h2>
-            <p class="features-subtitle">
-                We've combined the best tools into one seamless platform.
-            </p>
+            <h2 class="features-title">What <span class="text-gradient">KollabHub</span> Does</h2>
+            <p class="features-subtitle">We've combined the best tools into one seamless platform.</p>
         </div>
-
         <div class="features-grid">
             <div class="feature-card">
                 <h3>Real-Time Team Chat</h3>
                 <p>Seamless communication with channels and direct messages.</p>
             </div>
-
             <div class="feature-card">
                 <h3>Task Management</h3>
                 <p>Powerful Kanban boards to manage your workflow.</p>
             </div>
-
             <div class="feature-card">
                 <h3>AI-Powered Assistance</h3>
                 <p>Smart summaries and intelligent suggestions.</p>
             </div>
-
             <div class="feature-card">
                 <h3>Unified Workspace</h3>
                 <p>Everything in one place. No more switching apps.</p>
@@ -146,24 +123,18 @@
     </div>
 </section>
 
-<!-- ================= CTA ================= -->
+<!-- CTA -->
 <section class="cta">
     <div class="container cta-content">
         <h2 class="cta-title">Ready to transform how you work?</h2>
-
         {% if user.is_authenticated %}
-            <a href="{% url 'profile' %}" class="btn btn-primary btn-xl">
-                Go to Workspace
-            </a>
+            <a href="{% url 'workspace' %}" class="btn btn-primary btn-xl">Go to Workspace</a>
         {% else %}
-            <a href="{% url 'signup' %}" class="btn btn-primary btn-xl">
-                Get Started for Free
-            </a>
+            <a href="{% url 'signup' %}" class="btn btn-primary btn-xl">Get Started for Free</a>
         {% endif %}
     </div>
 </section>
 
-<!-- ================= FOOTER ================= -->
 <footer class="footer">
     <div class="container footer-content">
         <div class="footer-logo">
@@ -174,289 +145,6 @@
     </div>
 </footer>
 
-<!-- Django Static JS -->
 <script src="{% static 'js/home.js' %}"></script>
 </body>
 </html>
-
-<!-- {% load static %}
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>KollabHub Landing Page</title>
-
-</head>
-<body>
-<link rel="stylesheet" href= "{% static 'css/home.css' %}">
-<header class="container" role="banner">
-  <div class="logo-part" aria-label="Kollab Hub Logo">
-    <span>Kollab</span><span>Hub</span>
-  </div>
-  <nav aria-label="Primary navigation">
-    <a href="#features">Features</a>
-    <a href="#overview">Overview</a>
-    <a href="#ai-powered">AI-Powered</a>
-    <a href="#about">About Us</a>
-  </nav>
-  
- <div class="auth-buttons">
-  <a href="{% url 'signup' %}" class="btn-signup" aria-label="Signup for Kollab Hub">Sign Up</a>
-<a href="{% url 'login' %}" class="btn-login" aria-label="Login to Kollab Hub">Login</a>
-
-  </div>
-</header>
-
-<main>
-  <section class="container hero" aria-labelledby="hero-title">
-    <div class="hero-text">
-      <div class="highlight-title">KollabHub</div>
-      <h1>Unify. Transform. Dominate.<br>One Workspace.</h1>
-      <p>
-        The complete workspace for modern teams. Messaging, calls, file sharing,
-        project management, and AI assistant — everything you need in one seamless platform.
-      </p>
-      <div class="hero-buttons">
-        <a href="{% url 'login' %}" class="btn-getstarted" aria-label="Get Started with Kollab Hub">Get Started</a>
-        {% comment %} <button class="btn-getstarted" aria-label="Get Started with Kollab Hub">Get Started</button> {% endcomment %}
-       <a href="#overview" class="btn-watch" aria-label="Watch Kollab Hub in Action">
-  <svg aria-hidden="true" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke="currentColor" viewBox="0 0 24 24" width="20" height="20" focusable="false" role="img">
-    <path d="M14.752 11.168l-6.518-3.75v7.472l6.518-3.722z"></path>
-    <circle cx="12" cy="12" r="10"></circle>
-  </svg>
-  Watch in Action
-</a>
-      </div>
-    </div>
-    <div class="hero-image" role="img" aria-label="Young man sitting on a desk using desktop computer with colleagues in background modern office environment">
-      <img src="https://storage.googleapis.com/workspace-0f70711f-8b4e-4d94-86f1-2a93ccde5887/image/2e31467a-5f3c-4fbf-831c-19c638b2f133.png" alt="Young man sitting on a desk using desktop computer with colleagues in background modern office environment" onerror="this.style.display='none'" />
-    </div>
-  </section>
-
-  <section id="features" class="features-intro" aria-labelledby="features-title">
-    <h2 id="features-title">Everything your team needs in one place</h2>
-    <p>KollabHub combines all your essential collaboration tools into a single, seamless platform.</p>
-  </section>
-
-  <section class="features-grid">
-    <article class="feature-card" tabindex="0" aria-labelledby="feature1-title" aria-describedby="feature1-desc">
-      <div class="feature-icon" aria-hidden="true">
-        <svg stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke="#0284C7" fill="none" viewBox="0 0 24 24" width="22" height="22">
-          <circle cx="12" cy="12" r="10"></circle>
-          <path d="M12 6v6l4 2"></path>
-        </svg>
-      </div>
-      <div class="feature-content">
-        <h3 id="feature1-title">Real-time Messaging</h3>
-        <p id="feature1-desc">Send messages and emojis instantly. Integrate with your existing tools and get notified.</p>
-      </div>
-    </article>
-    <article class="feature-card" tabindex="0" aria-labelledby="feature2-title" aria-describedby="feature2-desc">
-      <div class="feature-icon" aria-hidden="true">
-        <svg stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke="#0284C7" fill="none" viewBox="0 0 24 24" width="22" height="22">
-          <rect x="2" y="6" width="20" height="12" rx="2" ry="2"></rect>
-          <path d="M16 6v12"></path>
-          <path d="M8 6v12"></path>
-        </svg>
-      </div>
-      <div class="feature-content">
-        <h3 id="feature2-title">Workspace Management</h3>
-        <p id="feature2-desc">Create multiple workspaces for different projects and invite team members with ease.</p>
-      </div>
-    </article>
-    <article class="feature-card" tabindex="0" aria-labelledby="feature3-title" aria-describedby="feature3-desc">
-      <div class="feature-icon" aria-hidden="true">
-        <svg stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke="#0284C7" fill="none" viewBox="0 0 24 24" width="22" height="22">
-          <path d="M21 15a2 2 0 0 1-2 2h-4l-3 3v-3H5a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-          <line x1="9" y1="10" x2="9" y2="10"></line>
-          <line x1="9" y1="14" x2="9" y2="14"></line>
-          <line x1="13" y1="12" x2="13" y2="12"></line>
-        </svg>
-      </div>
-      <div class="feature-content">
-        <h3 id="feature3-title">Audio & Video Calls</h3>
-        <p id="feature3-desc">High-quality audio and video conferences with easy sharing and recording options.</p>
-      </div>
-    </article>
-    <article class="feature-card" tabindex="0" aria-labelledby="feature4-title" aria-describedby="feature4-desc">
-      <div class="feature-icon" aria-hidden="true">
-        <svg stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke="#0284C7" fill="none" viewBox="0 0 24 24" width="22" height="22">
-          <path d="M4 4h16v16H4z"></path>
-          <path d="M12 12h4v4h-4z"></path>
-        </svg>
-      </div>
-      <div class="feature-content">
-        <h3 id="feature4-title">Media & File Sharing</h3>
-        <p id="feature4-desc">Share documents, videos, and images with your team easily and securely in real-time.</p>
-      </div>
-    </article>
-    <article class="feature-card" tabindex="0" aria-labelledby="feature5-title" aria-describedby="feature5-desc">
-      <div class="feature-icon" aria-hidden="true">
-        <svg stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke="#0284C7" fill="none" viewBox="0 0 24 24" width="22" height="22">
-          <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-          <line x1="3" y1="9" x2="21" y2="9"></line>
-          <line x1="9" y1="21" x2="9" y2="9"></line>
-        </svg>
-      </div>
-      <div class="feature-content">
-        <h3 id="feature5-title">Visual Task Boards</h3>
-        <p id="feature5-desc">Organize tasks with customizable boards, lists, and cards to track progress visually.</p>
-      </div>
-    </article>
-    <article class="feature-card" tabindex="0" aria-labelledby="feature6-title" aria-describedby="feature6-desc">
-      <div class="feature-icon" aria-hidden="true">
-        <svg stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke="#0284C7" fill="none" viewBox="0 0 24 24" width="22" height="22">
-          <path d="M12 20v-6"></path>
-          <path d="M6 14v2a6 6 0 0 0 12 0v-2"></path>
-          <circle cx="12" cy="10" r="4"></circle>
-        </svg>
-      </div>
-      <div class="feature-content">
-        <h3 id="feature6-title">AI Work Assistant</h3>
-        <p id="feature6-desc">Intelligent assistant that helps with task planning, meeting summaries, and more.</p>
-      </div>
-    </article>
-  </section>
-
-  <section id="overview" class="powerful-intro" aria-labelledby="powerful-title">
-    <h2 id="powerful-title">Beautiful. Intuitive. Powerful.</h2>
-    <p>See how KollabHub transforms the way your team works together.</p>
-  </section>
-
-  <section class="powerful-images container" aria-label="Overview images">
-    <img class="main-image" src="{% static "land.jpg" %}" alt="Modern open-plan office with multiple teams collaborating at desks under bright lighting and spacious layout" onerror="this.style.display='none'" />
-    <div class="powerful-subcards" role="list">
-      <article class="powerful-subcard" tabindex="0" role="listitem" aria-labelledby="sti-title">
-        <img src="https://storage.googleapis.com/workspace-0f70711f-8b4e-4d94-86f1-2a93ccde5887/image/acc0e249-3dfa-4f83-b26d-2d2ca1105405.png" alt="Collage of popular applications icons on a keyboard representing real-time messaging and app integrations" onerror="this.style.display='none'" />
-        <h3 id="sti-title">Real-time Messaging</h3>
-        <p>Integration with popular platforms enables smooth chatting, sharing, and notifications for your team.</p>
-      </article>
-      <article class="powerful-subcard" tabindex="0" role="listitem" aria-labelledby="visual-task-title">
-        <img src="https://storage.googleapis.com/workspace-0f70711f-8b4e-4d94-86f1-2a93ccde5887/image/a80da0dd-e6ca-4eee-9abf-3cd999a1ccd1.png" alt="Close-up of smartphone showing task board interface next to keyboard with focus on visual task boards in KollabHub" onerror="this.style.display='none'" />
-        <h3 id="visual-task-title">Visual Task Boards</h3>
-        <p>Organize your workflow visually, prioritize tasks and collaborate effectively with your team.</p>
-      </article>
-    </div>
-  </section>
-
-  <section id="ai-powered" class="ai-assistant" aria-labelledby="ai-section-title">
-    <div class="container ai-assistant-container">
-      <div class="ai-left">
-        <span class="tag">AI powered</span>
-        <h2 id="ai-section-title">Meet your team's AI assistant</h2>
-        <p>Our intelligent assistant helps your team stay focused, organize, and communicate effectively by suggesting tasks, themes, and summarizing chat threads.</p>
-        <ul class="ai-feature-list">
-          <li>
-            <svg stroke-width="3" stroke-linecap="round" stroke-linejoin="round" stroke="#00C2FF" fill="none" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>
-            <div class="ai-feature-content"><strong>Smart Summaries:</strong> Get a summarized overview of long discussions and meetings.</div>
-          </li>
-          <li>
-            <svg stroke-width="3" stroke-linecap="round" stroke-linejoin="round" stroke="#00C2FF" fill="none" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>
-            <div class="ai-feature-content"><strong>Automated Planning:</strong> Suggest new goals, projects, and reminders to keep track of deadlines.</div>
-          </li>
-          <li>
-            <svg stroke-width="3" stroke-linecap="round" stroke-linejoin="round" stroke="#00C2FF" fill="none" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>
-            <div class="ai-feature-content"><strong>Instant Insights:</strong> Get data-driven insights and proactive suggestions to boost productivity.</div>
-          </li>
-        </ul>
-        <a href="#about" class="cta-link" aria-label="Explore AI Assistant detailed features">Explore AI Assistant</a>
-      </div>
-      <div class="ai-right" role="region" aria-live="polite" aria-label="AI assistant chat simulation">
-        <div class="chat-window" aria-roledescription="Chat window">
-          <div class="chat-header">
-            <div class="avatar" aria-hidden="true">K</div>
-            <div class="user-info">
-              <h3>Kollab Assistant</h3>
-              <p>Online</p>
-            </div>
-            <div class="status-dot" aria-hidden="true"></div>
-          </div>
-          <div class="chat-messages" id="chatMessages" tabindex="0" aria-live="polite" aria-atomic="false">
-            <div class="chat-message" aria-label="Message from Kollab Assistant">
-              Hi there! I’m Kollab Assistant. How can I assist you today?
-            </div>
-          </div>
-          <form id="chatForm" class="chat-input-area" role="search" aria-label="Send a message to Kollab Assistant">
-            <input id="chatInput" class="chat-input" type="text" placeholder="Type your message here..." aria-label="Message input" autocomplete="off" required />
-            <button id="chatSendBtn" class="chat-send-btn" type="submit" aria-label="Send message" disabled>Send</button>
-          </form>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <section id="about" class="about-us" aria-labelledby="aboutus-title">
-    <div class="container about-container">
-      <span class="about-tag">AboutUs</span>
-      <h2 id="aboutus-title" class="about-title">Empowering teams to work smarter, not harder.</h2>
-      <p class="about-description">
-        KollabHub was born from a simple idea — to eliminate the chaos of switching between multiple apps just to stay connected and organized.
-        We believe collaboration should be seamless, intuitive, and secure — all from one place.
-      </p>
-      <p class="about-description">
-        Our platform brings together instant messaging, task management, workspace boards, and intelligent AI assistance to help modern teams stay aligned, productive, and connected.
-      </p>
-      <p class="about-description">
-        We couldn't be more excited to build tools that help people focus on what matters most.
-      </p>
-      <p class="about-subtitle">Our mission:</p>
-      <p class="about-paragraph">
-        To simplify teamwork by combining everything you need into one unified workspace.
-      </p>
-      <p class="about-subtitle">Our vision:</p>
-      <p class="about-paragraph">
-        A world where productivity and communication flow effortlessly.
-      </p>
-      <p class="about-description">
-        Let's build the future of collaboration — together.
-        KollabHub helps your team move faster, stay connected, and see meaningful work.
-      </p>
-    </div>
-  </section>
-</main>
-
-<footer role="contentinfo">
-  <div class="footer-container container">
-    <div class="footer-left">
-      <div class="logo-footer" aria-label="Kollab Hub Logo">
-        <span>Kollab</span><span>Hub</span>
-      </div>
-      <p>One workspace. Infinite possibilities.</p>
-      <p>© 2024 KollabHub. All rights reserved.</p>
-    </div>
-    <nav class="footer-navs" aria-label="Footer navigation links">
-      <div class="footer-nav" aria-labelledby="prod-links">
-        <h4 id="prod-links">Product</h4>
-        <ul>
-          <li><a href="#features">Features</a></li>
-          <li><a href="#overview">Overview</a></li>
-          <li><a href="#ai-powered">AI Center</a></li>
-          <li><a href="#about">Security</a></li>
-        </ul>
-      </div>
-      <div class="footer-nav" aria-labelledby="company-links">
-        <h4 id="company-links">Company</h4>
-        <ul>
-          <li><a href="#about">About</a></li>
-          <li><a href="#features">Careers</a></li>
-          <li><a href="#ai-powered">Support</a></li>
-          <li><a href="#contact">Contact</a></li>
-        </ul>
-      </div>
-      <div class="footer-nav" aria-labelledby="resources-links">
-        <h4 id="resources-links">Resources</h4>
-        <ul>
-          <li><a href="#features">Docs</a></li>
-          <li><a href="#about">Help Center</a></li>
-          <li><a href="#ai-powered">Tutorials</a></li>
-          <li><a href="#overview">API</a></li>
-        </ul>
-      </div>
-    </nav>
-  </div>
-</footer>
-
-<script src="{% static 'js/home.js' %}"></script>
-</body>
-</html> -->

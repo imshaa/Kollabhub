@@ -7,6 +7,7 @@ from . import views
 urlpatterns = [
     # path('chatui/', views.chatui, name='chatui'),
     path("chatui/<int:workspace_id>/", views.chatui, name="chatui"),
+    path("ai-chat/<int:workspace_id>/", views.ai_page, name="ai_page"),
     path("api/workspace/<int:workspace_id>/messages/", views.messages_api, name="messages_api"),
     path("api/workspace/<int:workspace_id>/members/", views.members_api, name="members_api"),
     path("api/workspace/<int:workspace_id>/send-invitation/", views.send_invitation, name="send_invitation"),
@@ -16,6 +17,7 @@ urlpatterns = [
     path("api/workspace/<int:workspace_id>/delete-workspace/", views.delete_workspace_api, name="delete_workspace_api"),
     path("api/workspace/<int:workspace_id>/privacy-settings/", views.get_privacy_settings, name="get_privacy_settings"),
     path("api/workspace/<int:workspace_id>/update-privacy-settings/", views.update_privacy_settings, name="update_privacy_settings"),
+    path("api/workspace/<int:workspace_id>/update-info/", views.update_workspace_info, name="update_workspace_info"),
     path("api/workspace/<int:workspace_id>/cleanup-messages/", views.cleanup_old_messages, name="cleanup_old_messages"),
     path("api/workspace/<int:workspace_id>/notifications/counts/", views.notification_counts_api, name="notification_counts_api"),
     path("api/workspace/<int:workspace_id>/notifications/mark-read/", views.notification_mark_read, name="notification_mark_read"),

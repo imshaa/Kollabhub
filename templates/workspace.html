@@ -1,0 +1,151 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KollabHub – Your Workspaces</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{% static 'css/chat.css' %}">
+    <link rel="stylesheet" href="{% static 'css/workspace.css' %}">
+</head>
+<body>
+    <nav class="navbar" style="display:flex; align-items:center; justify-content:space-between; padding:0 48px; height:64px; border-bottom:1px solid rgba(255,255,255,0.05); background:rgba(10,10,10,0.5); backdrop-filter:blur(12px); position:sticky; top:0; z-index:50;">
+        <div style="display:flex; align-items:center; gap:24px;">
+            <span class="logo" style="font-weight:800; font-size:1.15rem; color:var(--text);">KollabHub</span>
+            <a href="{% url 'home' %}" style="font-size:0.9rem; color:var(--text-400); text-decoration:none;">Home</a>
+        </div>
+        <div style="display:flex; align-items:center; gap:16px;">
+            <a href="{% url 'logout' %}" style="font-size:0.9rem; color:var(--text-400); text-decoration:none; margin-right:12px;">Sign Out</a>
+            <div class="avatar" style="width:34px; height:34px; border-radius:50%; background:linear-gradient(135deg, var(--accent), #e05a7d); cursor:pointer;">
+                {% if user.profile_picture %}
+                <img src="{{ user.profile_picture_url }}" style="width:100%; height:100%; border-radius:50%; object-fit:cover;">
+                {% else %}
+                <div style="width:100%; height:100%; display:flex; align-items:center; justify-content:center; color:white; font-weight:bold;">{{ user.username|first|upper }}</div>
+                {% endif %}
+            </div>
+        </div>
+    </nav>
+
+    {% if messages %}
+    {% for msg in messages %}
+    <div class="error-wrapper">
+        <div class="error-message" style="background: {% if 'error' in msg.tags %}#f87171{% else %}#4ade80{% endif %};">
+            {{ msg }}
+        </div>
+    </div>
+    {% endfor %}
+    {% endif %}
+
+    <main class="page">
+        <div class="page-header">
+            <div>
+                <h1>Your Workspaces</h1>
+                <p class="subtitle">Select a workspace to jump back in</p>
+            </div>
+            <div class="header-actions">
+                <button class="btn-outline" id="openJoinBtn">Join Workspace</button>
+                <button class="btn-primary" id="openCreateBtn">Create Workspace</button>
+            </div>
+        </div>
+
+        <div class="workspace-grid" id="workspaceGrid">
+            {% if workspaces %}
+            {% for ws in workspaces %}
+            <a href="{% url 'chatui' ws.id %}" class="ws-card">
+                <div class="card-top">
+                    <div class="ws-icon">
+                        {% if ws.image %}
+                        <img src="{{ ws.image_url }}" alt="{{ ws.title }}">
+                        {% else %}
+                        {{ ws.title|first|upper }}
+                        {% endif %}
+                    </div>
+                    <div class="badge-group">
+                        <span class="workspace-badge">{{ ws.visibility|title }}</span>
+                        {% if ws.admin == request.user %}
+                        <span class="role-badge">Admin</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="ws-name">{{ ws.title }}</div>
+                <div class="ws-desc">{{ ws.description|default:"No description provided." }}</div>
+            </a>
+            {% endfor %}
+            {% else %}
+            <div class="ws-card create-card" id="createGridCard">
+                <div class="create-icon">+</div>
+                <span class="workspace-create-title">Create New Workspace</span>
+            </div>
+            {% endif %}
+        </div>
+    </main>
+
+    <!-- Create Modal -->
+    <div class="overlay" id="createOverlay">
+        <div class="modal">
+            <button class="back-btn" id="createBackBtn" style="margin-bottom:20px;">Back</button>
+            <h2>Create Workspace</h2>
+            <form method="POST" action="{% url 'workspace' %}" enctype="multipart/form-data" class="form-card">
+                {% csrf_token %}
+                <div class="form-group">
+                    <label>Workspace Image</label>
+                    <input type="file" name="fileUpload" id="workspaceImage" accept="image/*">
+                    <div id="createWorkspaceImagePreview" style="width:60px; height:60px; border-radius:8px; background:#333; margin-top:10px;"></div>
+                </div>
+                <div class="form-group">
+                    <label>Workspace Name</label>
+                    <input type="text" name="title" placeholder="Acme Corp" required>
+                </div>
+                <div class="form-group">
+                    <label>Description</label>
+                    <textarea name="description" rows="3"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Visibility</label>
+                    <input type="hidden" name="visibility" id="visibilityInput" value="public">
+                    <div class="permission-grid">
+                        <div class="perm-card active" data-visibility="public">
+                            <strong>Public</strong>
+                            <p style="font-size:0.75rem; color:var(--text-400);">Anyone can join</p>
+                        </div>
+                        <div class="perm-card" data-visibility="private">
+                            <strong>Private</strong>
+                            <p style="font-size:0.75rem; color:var(--text-400);">Invite only</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-cancel" id="createCancelBtn">Cancel</button>
+                    <button type="submit" class="btn-primary">Create</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Join Modal -->
+    <div class="overlay" id="joinOverlay">
+        <div class="modal modal--narrow">
+            <h2>Join Workspace</h2>
+            <form method="POST" action="{% url 'join_workspace_manual' %}" class="form-card">
+                {% csrf_token %}
+                <div class="form-group">
+                    <label>Workspace Email</label>
+                    <input type="email" name="workspace_email" required>
+                </div>
+                <div class="form-group">
+                    <label>Workspace Title</label>
+                    <input type="text" name="title" required>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-cancel" id="joinCancelBtn">Cancel</button>
+                    <button type="submit" class="btn-primary">Request</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="{% static 'js/workspace.js' %}"></script>
+</body>
+</html>

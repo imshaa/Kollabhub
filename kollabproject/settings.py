@@ -1,16 +1,33 @@
 from django.contrib.messages import constants as messages
-
+from django.core.exceptions import ImproperlyConfigured
+from dotenv import load_dotenv
+import os
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+load_dotenv(BASE_DIR / ".env")
 
-SECRET_KEY = 'django-insecure-b6oi4pfy@710g@zsh+e%c%8gvi7^ef^xrinzbvdx1$qe7f0-x6'
+def get_env_var(name: str, default=None, required=False):
+    value = os.environ.get(name, default)
+    if required and value in (None, ""):
+        raise ImproperlyConfigured(f"Set the {name} environment variable.")
+    return value
 
+SECRET_KEY = get_env_var("SECRET_KEY", required=True)
 
-DEBUG = True
+DEBUG = get_env_var("DEBUG", "False").lower() in ("1", "true", "yes")
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = [
+    host.strip()
+    for host in get_env_var("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
+    if host.strip()
+]
+
+SUPABASE_URL = get_env_var("SUPABASE_URL", required=True)
+SUPABASE_KEY = get_env_var("SUPABASE_KEY", required=True)
+SUPABASE_SERVICE_KEY = get_env_var("SUPABASE_SERVICE_KEY", required=True)
+SUPABASE_BUCKET = get_env_var("SUPABASE_BUCKET", required=True)
 
 
 # Application definition
@@ -108,9 +125,5 @@ STATICFILES_DIRS = [
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-
 AUTH_USER_MODEL = 'kollabapp.CustomUser'
-
-
-MEDIA_URL = '/media/'
-MEDIA_ROOT = BASE_DIR / 'media'
+LOGIN_URL = '/login/'
