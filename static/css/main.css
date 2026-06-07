@@ -961,3 +961,31 @@ button {
         transform: translate(-50%, 0);
     }
 }
+
+/* ═══════════════════════════════════════════════════
+   GLOBAL MOBILE RESETS
+   Add at the BOTTOM of main.css
+═══════════════════════════════════════════════════ */
+
+/* Prevent horizontal overflow on all pages */
+html, body {
+  overflow-x: hidden;
+  max-width: 100vw;
+}
+
+/* Tap highlight removal on mobile */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Smooth scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Mobile touch target minimum */
+@media (max-width: 640px) {
+  button, a, [role="button"] {
+    min-height: 36px;
+  }
+}

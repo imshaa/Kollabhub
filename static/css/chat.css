@@ -2252,4 +2252,440 @@ input::placeholder, textarea::placeholder { color: var(--muted); font-weight: 30
   transform      : translateX(-50%) translateY(0);
   pointer-events : auto;
 }
+/* ═══════════════════════════════════════════════════════════════
+   RESPONSIVE PATCH — workspace.css
+   Full rewrite — paste at the VERY BOTTOM of workspace.css
+   replacing the previous responsive patch entirely
+═══════════════════════════════════════════════════════════════ */
 
+/* ── 1. Global mobile base fixes ─────────────────────────────── */
+html, body {
+  overflow-x: hidden;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ── 2. Sidebar off-canvas infrastructure ────────────────────── */
+.sidebar-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.7);
+  backdrop-filter: blur(4px);
+  z-index: 89;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease;
+}
+.sidebar-backdrop.visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* ── 3. Mobile topbar ─────────────────────────────────────────── */
+.mobile-topbar {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  height: 52px;
+  background: rgba(13,13,13,0.97);
+  backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--border-soft);
+  flex-shrink: 0;
+  z-index: 80;
+}
+
+.mobile-topbar-title {
+  font-family: 'Syne', sans-serif;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--text);
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.mobile-topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+/* ── 4. Hamburger button ─────────────────────────────────────── */
+.sidebar-toggle {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: none;
+  border: none;
+  color: var(--text-400);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  flex-shrink: 0;
+}
+.sidebar-toggle:hover {
+  background: var(--border-soft);
+  color: var(--text);
+}
+
+/* ── 5. Mobile action icon button (call/video/info in topbar) ── */
+.mobile-action-btn {
+  display: none; /* shown only on mobile via media query */
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+  background: var(--surface);
+  border: 1px solid var(--border-soft);
+  color: var(--text-400);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  flex-shrink: 0;
+  text-decoration: none;
+}
+.mobile-action-btn:hover {
+  background: var(--surface2);
+  color: var(--accent);
+}
+.mobile-action-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* ════════════════════════════════════════════════
+   TABLET  ≤ 900px
+════════════════════════════════════════════════ */
+@media (max-width: 900px) {
+  .sidebar { width: 220px; }
+  .view-subtitle { display: none; }
+  .msg-body { max-width: 72%; }
+  .vn-bubble { min-width: 190px; }
+  .cf-image-bubble,
+  .cf-inline-image { max-width: 240px; }
+  .cf-video-bubble,
+  .cf-inline-video { max-width: 260px; }
+  .cf-doc-bubble   { max-width: 260px; }
+}
+
+/* ════════════════════════════════════════════════
+   MOBILE  ≤ 640px
+════════════════════════════════════════════════ */
+@media (max-width: 640px) {
+
+  /* ── Layout ──────────────────────────────────── */
+  html, body { overflow: hidden; }
+
+  .ws-layout {
+    flex-direction: column;
+    height: 100dvh;
+  }
+
+  /* ── Sidebar off-canvas ──────────────────────── */
+  .sidebar {
+    position: fixed;
+    top: 0; left: 0; bottom: 0;
+    width: 265px;
+    z-index: 90;
+    transform: translateX(-100%);
+    transition: transform 0.28s cubic-bezier(0.16,1,0.3,1);
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+  .sidebar.open {
+    transform: translateX(0);
+    box-shadow: 6px 0 40px rgba(0,0,0,0.7);
+  }
+  .sidebar-backdrop { display: block; }
+
+  /* ── Mobile topbar visible ───────────────────── */
+  .mobile-topbar  { display: flex; }
+  .sidebar-toggle { display: flex; }
+
+  /* Call / video / info buttons shown in mobile topbar */
+  .mobile-action-btn { display: flex; }
+
+  /* ── Main area ───────────────────────────────── */
+  .main-area {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* ── Views ───────────────────────────────────── */
+  .view {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  /* ── Desktop view-header: hide on mobile ─────── 
+     The mobile-topbar replaces it entirely.
+     We hide the header so there's no duplicate.    */
+  .view-header {
+    display: none !important;
+  }
+
+  /* ── Messages area ───────────────────────────── */
+  .messages-area {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 12px 10px 6px;
+    gap: 4px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Message groups */
+  .msg-group {
+    display: flex;
+    width: 100%;
+    flex-shrink: 0;
+    padding: 4px 0;
+    position: static;
+  }
+  .msg-group.self { flex-direction: row-reverse; }
+
+  .msg-body { max-width: 82%; }
+
+  .msg-av {
+    width: 28px;
+    height: 28px;
+    font-size: .72rem;
+    flex-shrink: 0;
+  }
+
+  .msg-bubble {
+    font-size: .82rem;
+    padding: 8px 11px;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+  }
+
+  .msg-name { font-size: .74rem; }
+  .msg-time { font-size: .64rem; }
+
+  .msg-date-divider {
+    font-size: .66rem;
+    padding: 5px 10px;
+    margin: 10px auto 6px;
+  }
+
+  /* ── Chat input ──────────────────────────────── */
+  .chat-input-wrap {
+    padding: 6px 8px 10px;
+    flex-shrink: 0;
+  }
+  .chat-input-box {
+    border-radius: 10px;
+    padding: 5px 6px;
+  }
+  .chat-input { font-size: .82rem; }
+  .chat-tip   { display: none; }
+
+  /* ── Voice note bars ─────────────────────────── */
+  .vn-recording-bar,
+  .vn-preview-bar {
+    padding: 6px 10px;
+  }
+  .vn-wave-canvas { width: 100px !important; }
+
+  /* ── Voice note player bubble ────────────────── */
+  .vn-bubble {
+    min-width: 0;
+    width: 100%;
+    max-width: 100%;
+    padding: 8px 10px;
+    gap: 8px;
+  }
+  .vn-play-btn      { width: 30px; height: 30px; }
+  .vn-waveform-wrap { height: 30px; }
+  .vn-timings       { font-size: .62rem; }
+  .vn-speed-btn     { font-size: .62rem; padding: 1px 4px; }
+
+  /* ── Image bubbles ───────────────────────────── */
+  .cf-image-bubble,
+  .cf-inline-image {
+    max-width: min(260px, 80vw);
+    max-height: 200px;
+  }
+
+  /* ── Video bubbles ───────────────────────────── */
+  .cf-video-bubble { max-width: min(280px, 82vw); }
+  .cf-inline-video { max-width: 100%; max-height: 180px; }
+
+  /* ── Document / file card ────────────────────── */
+  .cf-doc-bubble {
+    min-width: 0;
+    width: 100%;
+    max-width: min(280px, 82vw);
+    padding: 10px 12px !important;
+    gap: 10px;
+  }
+  .cf-doc-icon { width: 32px; }
+  .cf-doc-name { font-size: .78rem; }
+  .cf-doc-meta { font-size: .66rem; }
+  .cf-doc-dl   { width: 28px; height: 28px; }
+
+  /* ── File preview bar ────────────────────────── */
+  .cf-preview-bar   { padding: 8px 10px; }
+  .cf-preview-thumb { width: 40px; height: 40px; }
+  .cf-preview-name  { font-size: .78rem; }
+  .cf-preview-size  { font-size: .66rem; }
+
+  /* ── Settings view ───────────────────────────── */
+  .settings-body {
+    padding: 0 10px 28px;
+    overflow-y: auto;
+  }
+
+  .tab-bar {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    margin-bottom: 16px;
+  }
+  .tab-bar::-webkit-scrollbar { display: none; }
+
+  .tab {
+    white-space: nowrap;
+    padding: 10px 11px;
+    font-size: .76rem;
+    gap: 4px;
+  }
+  .tab svg { display: none; }
+
+  .tab-panel-header {
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+  .tab-panel-header h3 { font-size: .95rem; }
+
+  .settings-card { padding: 14px; }
+
+  .vis-toggle { flex-direction: column; }
+
+  .toggle-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .toggle-group { flex-wrap: wrap; }
+
+  .member-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 12px;
+  }
+  .member-row-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .danger-row {
+    flex-direction: column;
+    gap: 8px;
+  }
+  .danger-row .select-sm { width: 100%; }
+
+  /* ── Modals — bottom sheet ───────────────────── */
+  .overlay {
+    padding: 0;
+    align-items: flex-end;
+  }
+
+  .modal {
+    padding: 20px 16px 24px;
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+    max-width: 100%;
+    max-height: 92dvh;
+    width: 100%;
+    margin: 0;
+    overflow-y: auto;
+  }
+  .modal--narrow { max-width: 100%; }
+
+  .modal h2 { font-size: 1.15rem; }
+
+  .form-card { padding: 16px; }
+  .form-row  { grid-template-columns: 1fr; gap: 10px; }
+
+  .modal-actions {
+    flex-direction: column-reverse;
+    gap: 8px;
+  }
+  .modal-actions .btn-primary,
+  .modal-actions .btn-cancel {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .status-opts { gap: 6px; }
+  .status-opt  { padding: 6px 10px; font-size: .74rem; }
+
+  .priority-opts { gap: 6px; }
+  .priority-opt  { font-size: .74rem; }
+
+  .profile-av-wrap { margin-bottom: 12px; }
+
+  /* ── AI panel ────────────────────────────────── */
+  .ai-panel {
+    left: 8px;
+    right: 8px;
+    bottom: 76px;
+    width: auto;
+    max-height: 72dvh;
+  }
+  .ai-fab {
+    bottom: 14px;
+    right: 14px;
+    width: 48px;
+    height: 48px;
+  }
+
+  /* ── Call modal ──────────────────────────────── */
+  .call-modal-overlay { padding: 0; }
+  .call-modal-box {
+    width: 100%;
+    height: 100dvh;
+    border-radius: 0;
+  }
+
+  /* ── Incoming call banner ────────────────────── */
+  .incoming-call-banner {
+    left: 10px;
+    right: 10px;
+    bottom: 80px;
+    top: auto;
+  }
+
+  /* ── Error toast ─────────────────────────────── */
+  .cf-error-toast {
+    bottom: 74px;
+    max-width: 90vw;
+  }
+}
+
+/* ════════════════════════════════════════════════
+   VERY SMALL  ≤ 380px
+════════════════════════════════════════════════ */
+@media (max-width: 380px) {
+  .msg-body      { max-width: 88%; }
+  .msg-bubble    { font-size: .78rem; padding: 7px 10px; }
+  .vn-bubble     { padding: 7px 8px; gap: 6px; }
+  .cf-doc-bubble { max-width: 90vw; }
+  .tab           { padding: 8px 9px; font-size: .72rem; }
+  .mobile-action-btn { width: 32px; height: 32px; }
+  .mobile-action-btn svg { width: 14px; height: 14px; }
+}

@@ -183,7 +183,9 @@ html, body {
   display: none;
   position: absolute;
   top: calc(100% + 8px);
-  right: 0;
+  left: 0;       /* aligns to the left edge of the filter button */
+  right: auto;
+ 
   width: 230px;
   background: var(--surface);
   border: 1px solid var(--border);
@@ -1677,3 +1679,499 @@ input[type="text"]::placeholder { color: var(--text-500); }
 
 /* ── Toast ────────────────────────────────────────── */
 #toastContainer { pointer-events:none; }
+
+
+/* ═══════════════════════════════════════════════════════════════
+   TASKBOARD RESPONSIVE PATCH
+   Professional mobile layout — Trello-style
+   Paste at the VERY BOTTOM of tasks.css
+═══════════════════════════════════════════════════════════════ */
+
+/* ════════════════════════════════════════
+   TABLET  ≤ 900px
+════════════════════════════════════════ */
+@media (max-width: 900px) {
+  .board-header { height: 54px; padding: 0 14px; gap: 10px; }
+  .board-title  { font-size: .95rem; }
+  .board-subtitle { display: none; }
+
+  .search-input { width: 140px; }
+
+  .kanban-col   { width: 240px; }
+  .kanban-add-col { width: 210px; }
+
+  /* Task detail: stack on tablet */
+  .task-detail-layout { flex-direction: column; max-height: none; }
+  .task-detail-sidebar {
+    width: 100%;
+    border-top: 1px solid var(--border-soft);
+    border-right: none;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 0;
+    padding: 14px 18px;
+  }
+  .sidebar-section-block {
+    width: 50%;
+    border-bottom: none;
+    border-right: 1px solid var(--border-soft);
+    padding: 10px 12px;
+    margin: 0;
+  }
+  .sidebar-section-block:nth-child(even) { border-right: none; }
+  .sidebar-actions {
+    width: 100%;
+    flex-direction: row;
+    gap: 8px;
+    margin-top: 10px;
+    padding: 10px 0 0;
+    border-top: 1px solid var(--border-soft);
+  }
+  .sidebar-action-btn { flex: 1; justify-content: center; }
+}
+
+/* ════════════════════════════════════════
+   MOBILE  ≤ 640px
+════════════════════════════════════════ */
+@media (max-width: 640px) {
+
+  /* ── Board header ──────────────────────── */
+  .board-header {
+    height: 52px;
+    padding: 0 12px;
+    gap: 8px;
+    position: sticky;
+    top: 0;
+    z-index: 50;
+  }
+
+  .board-title  { font-size: .88rem; }
+  .board-subtitle { display: none; }
+
+  /* Collapse search into icon-only on mobile */
+  .search-wrap { display: none; }
+
+  /* Filter bar compact */
+  .filter-bar { gap: 6px; }
+  .filter-icon-btn { padding: 7px 10px; font-size: .76rem; }
+  .filter-icon-btn span { display: none; } /* hide label, keep icon */
+
+  /* Add task button — icon only */
+  .btn-accent span { display: none; }
+  .btn-accent { padding: 8px 10px; }
+
+  /* Board settings gear */
+  .board-settings-btn { width: 32px; height: 32px; }
+
+  /* ── Board wrap — horizontal scroll ───── */
+  .board-wrap {
+    height: calc(100dvh - 52px);
+    padding: 12px 10px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+  }
+  .board-wrap::-webkit-scrollbar { display: none; }
+
+  /* ── Kanban layout ─────────────────────── */
+  .kanban {
+    gap: 10px;
+    height: 100%;
+    padding-right: 10px; /* trailing space after last col */
+  }
+
+  /* Each column snap-scrolls into view */
+  .kanban-col {
+    width: 82vw;          /* nearly full width so it feels native */
+    max-width: 320px;
+    flex-shrink: 0;
+    scroll-snap-align: start;
+    scroll-snap-stop: always;
+    max-height: 100%;
+  }
+
+  .kanban-add-col {
+    width: 72vw;
+    max-width: 280px;
+    scroll-snap-align: start;
+    min-height: 100px;
+  }
+
+  /* Column header */
+  .kanban-col-header { padding: 10px 10px 8px; }
+  .col-name  { font-size: .72rem; }
+  .col-count { font-size: .64rem; }
+
+  /* Cards */
+  .kanban-cards { padding: 6px; gap: 6px; }
+
+  .task-card { padding: 10px; }
+  .task-card-title { font-size: .8rem; }
+  .task-card-desc  { font-size: .7rem; }
+
+  .task-priority   { font-size: .58rem; padding: 2px 6px; }
+  .task-assignee-av { width: 20px; height: 20px; font-size: .58rem; }
+
+  .add-card-btn {
+    font-size: .74rem;
+    padding: 6px 8px;
+    margin: 2px 6px 6px;
+    width: calc(100% - 12px);
+  }
+
+  /* ── Filter dropdown ───────────────────── */
+  .filter-dropdown {
+    right: auto;
+    left: 0;
+    width: min(220px, 90vw);
+  }
+
+  /* ── Modals — bottom sheet style ──────── */
+  .overlay {
+    padding: 0;
+    align-items: flex-end;
+  }
+
+  .modal {
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+    max-width: 100%;
+    width: 100%;
+    max-height: 92dvh;
+    overflow-y: auto;
+    margin: 0;
+  }
+  .modal-sm,
+  .modal-lg { max-width: 100%; }
+
+  .modal-header {
+    padding: 18px 16px 0;
+    position: sticky;
+    top: 0;
+    background: var(--bg);
+    z-index: 2;
+  }
+  .modal-header h2 { font-size: 1.1rem; }
+
+  .form-card { padding: 14px 16px 20px; }
+
+  .form-row { grid-template-columns: 1fr; gap: 10px; }
+
+  .modal-actions {
+    flex-direction: column-reverse;
+    gap: 8px;
+    padding: 0 16px 16px;
+  }
+  .modal-actions .btn-primary,
+  .modal-actions .btn-cancel {
+    width: 100%;
+    justify-content: center;
+    padding: 11px;
+  }
+
+  /* Priority opts — full row */
+  .priority-opts { gap: 6px; }
+  .priority-opt  { padding: 8px 6px; font-size: .74rem; }
+
+  /* Color dots */
+  .color-opts { gap: 10px; }
+  .color-dot  { width: 28px; height: 28px; }
+
+  /* ── Task detail modal ─────────────────── */
+  .task-detail-layout {
+    flex-direction: column;
+    max-height: none;
+    overflow: visible;
+  }
+
+  .task-detail-main {
+    padding: 16px;
+    border-right: none;
+    border-bottom: 1px solid var(--border-soft);
+    overflow: visible;
+  }
+
+  .detail-title { font-size: 1.1rem; }
+
+  .detail-section-label { font-size: .7rem; }
+
+  /* Sidebar becomes a horizontal strip at the bottom */
+  .task-detail-sidebar {
+    width: 100%;
+    flex-direction: row;
+    flex-wrap: wrap;
+    padding: 12px 14px;
+    gap: 0;
+    overflow: visible;
+  }
+
+  .sidebar-section-block {
+    width: 50%;
+    border-bottom: none;
+    border-right: 1px solid var(--border-soft);
+    padding: 8px 10px;
+    margin-bottom: 8px;
+  }
+  .sidebar-section-block:nth-child(even) {
+    border-right: none;
+  }
+  .sidebar-meta-label { font-size: .64rem; }
+  .sidebar-meta-value { font-size: .74rem; }
+
+  /* Priority chips — horizontal on mobile */
+  .priority-opts-sm {
+    flex-direction: row;
+    gap: 5px;
+  }
+  .priority-chip {
+    flex: 1;
+    text-align: center;
+    padding: 5px 4px;
+    font-size: .7rem;
+  }
+
+  /* Sidebar actions — full width row */
+  .sidebar-actions {
+    width: 100%;
+    flex-direction: row;
+    gap: 8px;
+    margin-top: 8px;
+    padding: 10px 14px 14px;
+    border-top: 1px solid var(--border-soft);
+  }
+  .sidebar-action-btn {
+    flex: 1;
+    justify-content: center;
+    font-size: .74rem;
+    padding: 8px 6px;
+  }
+
+  /* Comments */
+  .comment-av   { width: 24px; height: 24px; font-size: .62rem; }
+  .comment-text { font-size: .76rem; }
+
+  /* Attachments */
+  .attach-type-bar { gap: 5px; }
+  .attach-type-btn { font-size: .72rem; padding: 5px 8px; }
+
+  .attachment-item  { padding: 8px; }
+  .attach-file-icon { width: 28px; height: 28px; font-size: .6rem; }
+  .attach-name      { font-size: .76rem; }
+  .attach-size      { font-size: .64rem; }
+
+  /* Board settings modal */
+  .board-settings-modal {
+    width: 100% !important;
+    max-height: 95dvh;
+  }
+  .bset-body { flex-direction: column; overflow: visible; }
+  .bset-nav {
+    width: 100%;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding: 8px;
+    gap: 4px;
+    border-right: none;
+    border-bottom: 1px solid var(--border-soft);
+    scrollbar-width: none;
+  }
+  .bset-nav::-webkit-scrollbar { display: none; }
+  .bset-nav-item {
+    white-space: nowrap;
+    flex-shrink: 0;
+    padding: 7px 12px;
+    font-size: .78rem;
+  }
+  .bset-nav-item svg { display: none; }
+
+  .bset-panels  { padding: 14px; }
+  .bset-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 12px;
+  }
+  .bset-select  { width: 100%; min-width: unset; }
+  .bset-number  { width: 100%; text-align: left; }
+  .bset-toggle  { align-self: flex-start; }
+
+  .bset-footer {
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px 14px;
+  }
+  .bset-footer .btn-primary {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+/* ════════════════════════════════════════
+   VERY SMALL  ≤ 380px
+════════════════════════════════════════ */
+@media (max-width: 380px) {
+  .kanban-col   { width: 88vw; }
+  .task-card-title { font-size: .76rem; }
+  .board-title  { font-size: .82rem; }
+  .sidebar-section-block { width: 100%; border-right: none; }
+  .priority-chip { font-size: .64rem; padding: 4px 3px; }
+  .bset-nav-item { font-size: .72rem; padding: 6px 10px; }
+}
+/* ═══════════════════════════════════════════════════════════════
+   TASKBOARD FILTER FIX + ADDITIONAL RESPONSIVE
+   Paste AFTER the existing responsive patch in tasks.css
+═══════════════════════════════════════════════════════════════ */
+
+/* ── Filter dropdown — always visible, never clipped ────── */
+.filter-dropdown-wrap { position: relative; }
+
+.filter-dropdown {
+  /* Override right:0 if it still exists anywhere */
+  right: auto;
+  left: 0;
+  width: 230px;
+  max-width: calc(100vw - 24px); /* never wider than viewport */
+}
+
+/* On mobile, keep dropdown within screen bounds */
+@media (max-width: 640px) {
+  .filter-dropdown {
+    position: fixed;            /* break out of any overflow:hidden parent */
+    top: auto;
+    left: 12px;
+    right: 12px;
+    width: auto;
+    max-width: unset;
+    max-height: 70dvh;
+    overflow-y: auto;
+    z-index: 9999;
+  }
+
+  /* Filter option text — make sure it's readable */
+  .filter-opt       { font-size: .8rem; padding: 9px 11px; }
+  .filter-opt-dot   { width: 9px; height: 9px; }
+  .filter-opt-icon  { font-size: .82rem; }
+  .filter-opt-check { font-size: .78rem; }
+
+  .filter-assignee-opt  { font-size: .8rem; padding: 8px 11px; }
+  .filter-assignee-av   { width: 22px; height: 22px; }
+  .filter-assignee-check { font-size: .78rem; }
+
+  .filter-dropdown-header { padding: 12px 12px 10px; }
+  .filter-dropdown-title  { font-size: .72rem; }
+  .filter-clear-btn       { font-size: .72rem; }
+
+  .filter-section       { padding: 6px 6px 4px; }
+  .filter-section-label { font-size: .65rem; }
+
+  /* Filter button — show icon + text on mobile */
+  .filter-icon-btn {
+    padding: 8px 12px;
+    font-size: .78rem;
+    gap: 6px;
+  }
+  /* Override the span:none from the main patch for filter specifically */
+  .filter-icon-btn span { display: inline; }
+}
+/* ═══════════════════════════════════════════════════════════════
+   BOARD HEADER + FILTER — FINAL FIX
+   Replaces the conflicting block at the bottom of tasks.css
+═══════════════════════════════════════════════════════════════ */
+
+@media (max-width: 640px) {
+
+  /* Board header layout */
+  .board-header {
+    padding: 0 10px;
+    gap: 6px;
+    overflow: visible;          /* let filter dropdown escape */
+  }
+
+  .board-header-left {
+    gap: 6px;
+    flex-shrink: 0;
+    min-width: 0;
+  }
+
+  .board-header-right {
+    gap: 6px;
+    flex-shrink: 1;
+    min-width: 0;
+    overflow: visible;
+    justify-content: flex-end;
+  }
+
+  /* Filter bar — horizontal, no wrapping */
+  .filter-bar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+    position: static;           /* let children use fixed positioning */
+  }
+
+  /* Search — completely hidden on mobile, no broken collapsed state */
+  .search-wrap  { display: none !important; }
+
+  /* Filter button — compact but fully readable */
+  .filter-icon-btn {
+    padding: 7px 10px;
+    font-size: .78rem;
+    gap: 5px;
+    white-space: nowrap;
+  }
+  /* Keep the text label visible next to icon */
+  .filter-icon-btn span { display: inline !important; }
+
+  /* Add task button — icon + text both visible */
+  .btn-accent {
+    padding: 7px 12px;
+    font-size: .78rem;
+    gap: 5px;
+    white-space: nowrap;
+  }
+  .btn-accent span { display: inline !important; }
+
+  /* Board title — truncate if too long */
+  .board-title {
+    font-size: .85rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 120px;
+  }
+
+  /* Filter dropdown — fixed to viewport so overflow:hidden can't clip it */
+  .filter-dropdown {
+    position: fixed !important;
+    top: 58px !important;       /* just below the header */
+    left: 10px !important;
+    right: 10px !important;
+    width: auto !important;
+    max-width: unset !important;
+    max-height: 65dvh;
+    overflow-y: auto;
+    z-index: 9999 !important;
+    border-radius: var(--radius-lg);
+    box-shadow: 0 20px 60px rgba(0,0,0,0.7);
+  }
+
+  /* Filter options — larger tap targets */
+  .filter-opt          { font-size: .82rem; padding: 10px 12px; }
+  .filter-opt-dot      { width: 9px; height: 9px; }
+  .filter-opt-check    { font-size: .8rem; }
+  .filter-assignee-opt { font-size: .82rem; padding: 9px 12px; }
+  .filter-assignee-av  { width: 24px; height: 24px; }
+  .filter-section-label { font-size: .66rem; }
+  .filter-dropdown-header { padding: 12px 14px 10px; }
+}
+
+@media (max-width: 380px) {
+  .board-title { max-width: 90px; font-size: .8rem; }
+  .btn-accent span { display: none !important; }
+  .btn-accent { padding: 7px 9px; }
+  .filter-icon-btn span { display: none !important; }
+  .filter-icon-btn { padding: 7px 9px; }
+}

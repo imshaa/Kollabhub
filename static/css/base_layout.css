@@ -21,6 +21,27 @@
   flex-direction: column;
   border-right: 1px solid var(--border-color);
   flex-shrink: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* Custom scrollbar styling for sidebar */
+.sidebar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.sidebar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sidebar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 3px;
+  transition: background 0.2s;
+}
+
+.sidebar::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.4);
 }
 
 .main-area {
@@ -93,5 +114,245 @@
 #sidebarLogoutBtn:hover {
   opacity: 1;
   color: #ef4444; /* Soft alert-red state fallback styling */
+}
+
+/* -------------------- Responsivenes ------------------ */
+
+
+/* ═══════════════════════════════════════════════════
+   RESPONSIVE PATCHES — Mobile & Tablet
+   Add at the BOTTOM of workspace.css
+═══════════════════════════════════════════════════ */
+
+/* ── Sidebar overlay backdrop (mobile) ─────────── */
+.sidebar-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.65);
+  backdrop-filter: blur(4px);
+  z-index: 90;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+.sidebar-backdrop.visible {
+  opacity: 1;
+}
+
+/* ── Hamburger menu button ──────────────────────── */
+.sidebar-toggle {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: none;
+  border: none;
+  color: var(--text-400);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  flex-shrink: 0;
+}
+.sidebar-toggle:hover {
+  background: var(--border-soft);
+  color: var(--text);
+}
+
+/* ── Mobile top bar (shown only on small screens) ── */
+.mobile-topbar {
+  display: none;
+  align-items: center;
+  gap: 10px;
+  padding: 0 14px;
+  height: 52px;
+  background: rgba(10,10,10,0.85);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border-soft);
+  flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  z-index: 80;
+}
+
+.mobile-topbar-title {
+  font-family: 'Syne', sans-serif;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text);
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ════════════════════════════════════════
+   TABLET  (≤ 900px)
+════════════════════════════════════════ */
+@media (max-width: 900px) {
+  .view-subtitle {
+    display: none;
+  }
+  .msg-body {
+    max-width: 75%;
+  }
+}
+
+/* ════════════════════════════════════════
+   MOBILE  (≤ 640px)
+════════════════════════════════════════ */
+@media (max-width: 640px) {
+
+  /* Layout */
+  .ws-layout {
+    flex-direction: column;
+    height: 100dvh; /* dynamic viewport for mobile browsers */
+  }
+
+  /* Sidebar: hidden off-canvas, slides in */
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 260px;
+    z-index: 100;
+    transform: translateX(-100%);
+    transition: transform 0.28s cubic-bezier(0.16,1,0.3,1);
+    overflow-y: auto;
+  }
+  .sidebar.open {
+    transform: translateX(0);
+    box-shadow: 4px 0 40px rgba(0,0,0,0.6);
+  }
+
+  /* Backdrop */
+  .sidebar-backdrop {
+    display: block;
+    pointer-events: none;
+  }
+  .sidebar-backdrop.visible {
+    pointer-events: auto;
+  }
+
+  /* Mobile top bar visible */
+  .mobile-topbar {
+    display: flex;
+  }
+
+  /* Hamburger button visible */
+  .sidebar-toggle {
+    display: flex;
+  }
+
+  /* Main area fills the rest */
+  .main-area {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* View fills full height below topbar */
+  .view {
+    flex: 1;
+    min-height: 0;
+  }
+
+  /* Chat view header — compact */
+  .view-header {
+    padding: 0 12px;
+    height: 50px;
+  }
+  .view-header-right .icon-btn:not(:last-child) {
+    display: none; /* hide call/video on mobile, keep info */
+  }
+  .member-stack {
+    display: none;
+  }
+  .header-divider {
+    display: none;
+  }
+
+  /* Messages area */
+  .messages-area {
+    padding: 14px 12px 6px;
+  }
+
+  /* Bubbles — wider on mobile */
+  .msg-body {
+    max-width: 85%;
+  }
+
+  /* Chat input */
+  .chat-input-wrap {
+    padding: 8px 10px 10px;
+  }
+  .chat-tip {
+    display: none;
+  }
+
+  /* Settings view */
+  .settings-body {
+    padding: 0 12px 28px;
+  }
+  .tab-bar {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .tab-bar::-webkit-scrollbar {
+    display: none;
+  }
+  .tab {
+    white-space: nowrap;
+    padding: 10px 12px;
+    font-size: 0.78rem;
+  }
+  .tab-panel-header {
+    flex-direction: column;
+    gap: 12px;
+  }
+  .form-row {
+    grid-template-columns: 1fr;
+  }
+  .vis-toggle {
+    flex-direction: column;
+  }
+  .toggle-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .danger-row {
+    flex-direction: column;
+  }
+  .danger-row .select-sm {
+    width: 100%;
+  }
+
+  /* AI panel */
+  .ai-panel {
+    left: 12px;
+    right: 12px;
+    bottom: 80px;
+    width: auto;
+    max-height: 70dvh;
+  }
+  .ai-fab {
+    bottom: 16px;
+    right: 16px;
+  }
+
+  /* Modals */
+  .modal {
+    padding: 22px 18px;
+    margin: 0 8px;
+    max-height: 95dvh;
+  }
+  .modal h2 {
+    font-size: 1.2rem;
+  }
 }
 

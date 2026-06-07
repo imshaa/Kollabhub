@@ -8,146 +8,185 @@
 })();
 
 /* ── AI Panel ──────────────────────────────────────────────────────────────── */
-/*
-  Workspace-aware AI panel script. Replaces older ai panel logic.
-  Uses workspace-scoped endpoints: /api/workspace/<id>/ai-chat/, ai-history, ai-clear-history
-*/
 (function () {
-  'use strict';
+  var fab        = document.getElementById('aiFab');
+  var fabWrap    = document.getElementById('aiFabWrap');
+  var expandBtn  = document.getElementById('aiExpandBtn');
+  var panel      = document.getElementById('aiPanel');
+  var close      = document.getElementById('aiClose');
+  var input      = document.getElementById('aiInput');
+  var send       = document.getElementById('aiSend');
+  var msgs       = document.getElementById('aiMessages');
 
-  /* ── DOM refs ────────────────────────────────────────────────────────────── */
-  const fab       = document.getElementById('aiFab');
-  const panel     = document.getElementById('aiPanel');
-  const closeBtn  = document.getElementById('aiClose');
-  const input     = document.getElementById('aiInput');
-  const sendBtn   = document.getElementById('aiSend');
-  const msgArea   = document.getElementById('aiMessages');
+  var aiNavBtn   = document.getElementById('aiNavBtn');
+  var dragState  = { active: false, isDragging: false, pointerId: null, startX: 0, startY: 0, startRight: 24, startBottom: 24 };
+  var idleTimer  = null;
 
-  if (!msgArea) return; // AI panel not in this page
-
-  /* ── Read workspaceId from layout data, DOM, or URL ─────────────────── */
-  function _getWorkspaceId() {
-    if (typeof window.currentWorkspaceId !== 'undefined' && window.currentWorkspaceId !== null) {
-      return window.currentWorkspaceId;
-    }
-    const fromDom = document.getElementById('messagesArea')?.dataset?.workspaceId;
-    if (fromDom) return fromDom;
-    const match = window.location.pathname.match(/\/([0-9]+)\/?/);
-    return match ? match[1] : null;
+  function updatePanelPosition() {
+    if (!fabWrap || !panel) return;
+    var right = parseFloat(fabWrap.style.right || getComputedStyle(fabWrap).right) || 24;
+    var bottom = parseFloat(fabWrap.style.bottom || getComputedStyle(fabWrap).bottom) || 24;
+    panel.style.right = right + 'px';
+    panel.style.bottom = (bottom + fabWrap.offsetHeight + 12) + 'px';
   }
 
-  const workspaceId = _getWorkspaceId();
-
-  /* ── CSRF helper ─────────────────────────────────────────────────────────── */
-  function _csrf() {
-    if (typeof getCSRFToken === 'function') return getCSRFToken();
-    const m = document.cookie.match(/csrftoken=([^;]+)/);
-    return m ? m[1] : '';
+  function setFabIdle(state) {
+    if (!fabWrap) return;
+    fabWrap.classList.toggle('fab-idle', state);
   }
 
-  /* ── Panel open / close ──────────────────────────────────────────────────── */
-  fab?.addEventListener('click', () => {
-    panel?.classList.toggle('visible');
-    if (panel?.classList.contains('visible')) {
-      _loadHistory();
-      setTimeout(() => input?.focus(), 120);
-    }
-  });
-
-  closeBtn?.addEventListener('click', () => panel?.classList.remove('visible'));
-  document.addEventListener('keydown', e => { if (e.key === 'Escape') panel?.classList.remove('visible'); });
-
-  /* ── Render one message bubble ───────────────────────────────────────────── */
-  function _appendBubble(role, content, animate) {
-    const wrap = document.createElement('div');
-    wrap.className = `ai-msg ${role === 'user' ? 'user' : 'ai'}`;
-    if (animate) wrap.style.opacity = '0';
-
-    const bubble = document.createElement('div');
-    bubble.className   = 'ai-msg-bubble';
-    bubble.textContent = content;
-
-    wrap.appendChild(bubble);
-    msgArea.appendChild(wrap);
-    msgArea.scrollTop = msgArea.scrollHeight;
-
-    if (animate) {
-      requestAnimationFrame(() => { wrap.style.transition = 'opacity .25s'; wrap.style.opacity = '1'; });
-    }
-    return wrap;
-  }
-
-  /* ── Typing indicator ────────────────────────────────────────────────────── */
-  let _typingEl = null;
-  function _showTyping() {
-    if (_typingEl) return;
-    _typingEl = document.createElement('div');
-    _typingEl.className = 'ai-msg ai';
-    _typingEl.innerHTML = `
-      <div class="ai-msg-bubble ai-typing-bubble">
-        <span class="ai-dot"></span>
-        <span class="ai-dot"></span>
-        <span class="ai-dot"></span>
-      </div>`;
-    msgArea.appendChild(_typingEl);
-    msgArea.scrollTop = msgArea.scrollHeight;
-  }
-  function _hideTyping() { _typingEl?.remove(); _typingEl = null; }
-
-  /* ── Load history from API ───────────────────────────────────────────────── */
-  async function _loadHistory() {
-    if (!workspaceId) return;
-    try {
-      const resp = await fetch(`/api/workspace/${workspaceId}/ai-history/`, { credentials: 'same-origin' });
-      if (!resp.ok) return;
-      const data = await resp.json();
-      if (data.history && data.history.length > 0) {
-        msgArea.innerHTML = '';
-        data.history.forEach(m => _appendBubble(m.role, m.content, false));
+  function scheduleFabIdle() {
+    if (!fabWrap) return;
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(function(){
+      if (panel && !panel.classList.contains('visible')) {
+        setFabIdle(true);
       }
-    } catch (err) { console.warn('[AI] History load failed:', err); }
+    }, 2500);
   }
 
-  /* ── Send message ────────────────────────────────────────────────────────── */
-  async function _send() {
-    const text = (input?.value || '').trim();
-    if (!text) return;
-    input.value = '';
-    input.disabled = true; if (sendBtn) sendBtn.disabled = true;
-    _appendBubble('user', text, true);
-    _showTyping();
-    if (!workspaceId) { _hideTyping(); _appendBubble('assistant', 'Could not determine workspace. Please refresh the page.', true); input.disabled = false; if (sendBtn) sendBtn.disabled = false; return; }
-
-    try {
-      const resp = await fetch(`/api/workspace/${workspaceId}/ai-chat/`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': _csrf() },
-        credentials: 'same-origin',
-        body: JSON.stringify({ message: text }),
-      });
-      const data = await resp.json();
-      _hideTyping();
-      if (!resp.ok || data.error) { _appendBubble('assistant', data.error || 'Something went wrong. Please try again.', true); }
-      else { _appendBubble('assistant', data.response, true); }
-    } catch (err) {
-      console.error('[AI] Send error:', err); _hideTyping(); _appendBubble('assistant', 'Network error — please check your connection.', true);
-    } finally { input.disabled = false; if (sendBtn) sendBtn.disabled = false; input.focus(); }
+  function clearFabIdle() {
+    clearTimeout(idleTimer);
+    setFabIdle(false);
   }
 
-  /* ── Wire send button + Enter key ────────────────────────────────────────── */
-  sendBtn?.addEventListener('click', _send);
-  input?.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); _send(); } });
+  function updatePanelState() {
+    var open = panel && panel.classList.contains('visible');
+    if (aiNavBtn) {
+      document.querySelectorAll('.sidebar-nav .nav-item').forEach(function(el){ el.classList.remove('active'); });
+      if (open) aiNavBtn.classList.add('active');
+    }
+    if (open && input) input.focus();
+    if (open) {
+      clearFabIdle();
+    } else {
+      scheduleFabIdle();
+    }
+    if (panel) updatePanelPosition();
+  }
 
-  /* ── Optional: Clear history button ─────────────────────────────────────── */
-  document.getElementById('aiClearBtn')?.addEventListener('click', async () => {
-    if (!workspaceId) return;
-    if (!confirm('Clear your AI conversation history for this workspace?')) return;
-    try {
-      await fetch(`/api/workspace/${workspaceId}/ai-clear-history/`, { method: 'POST', headers: { 'X-CSRFToken': _csrf() }, credentials: 'same-origin' });
-      msgArea.innerHTML = `\n        <div class="ai-msg ai">\n          <div class="ai-msg-bubble">\n            History cleared. How can I help you today?\n          </div>\n        </div>`;
-    } catch (err) { console.warn('[AI] Clear history failed:', err); }
+  if (fab) {
+    fab.addEventListener('click', function(e){
+      if (dragState.isDragging) return;
+      e.stopPropagation();
+      if (panel) panel.classList.toggle('visible');
+      updatePanelState();
+    });
+
+    fab.addEventListener('pointerdown', function(e){
+      if (e.button !== 0) return;
+      dragState.active = true;
+      dragState.pointerId = e.pointerId;
+      dragState.startX = e.clientX;
+      dragState.startY = e.clientY;
+      var comp = getComputedStyle(fabWrap || fab);
+      dragState.startRight = parseFloat(comp.right) || 24;
+      dragState.startBottom = parseFloat(comp.bottom) || 24;
+      clearFabIdle();
+      fab.setPointerCapture(e.pointerId);
+      e.preventDefault();
+    });
+    fab.addEventListener('pointermove', function(e){
+      if (!dragState.active || e.pointerId !== dragState.pointerId) return;
+      var dx = e.clientX - dragState.startX;
+      var dy = e.clientY - dragState.startY;
+      if (Math.abs(dx) + Math.abs(dy) < 6) return;
+      dragState.isDragging = true;
+      if (fabWrap) {
+        var right = Math.max(12, dragState.startRight - dx);
+        var bottom = Math.max(12, dragState.startBottom - dy);
+        fabWrap.style.right = right + 'px';
+        fabWrap.style.bottom = bottom + 'px';
+        updatePanelPosition();
+      }
+    });
+    fab.addEventListener('pointerup', function(e){
+      if (!dragState.active || e.pointerId !== dragState.pointerId) return;
+      dragState.active = false;
+      fab.releasePointerCapture && fab.releasePointerCapture(e.pointerId);
+      setTimeout(function(){ dragState.isDragging = false; }, 0);
+      scheduleFabIdle();
+    });
+    fabWrap && fabWrap.addEventListener('mouseenter', clearFabIdle);
+    fabWrap && fabWrap.addEventListener('mouseleave', scheduleFabIdle);
+  }
+
+  if (close) close.addEventListener('click', function(){
+    if (panel) panel.classList.remove('visible');
+    updatePanelState();
   });
 
+  if (aiNavBtn) aiNavBtn.addEventListener('click', function(e){
+    var href = aiNavBtn.getAttribute('href') || '';
+    if (href && href !== '#') {
+      // allow navigation to full AI page when the link points to it
+      e.preventDefault();
+      window.location.href = href;
+      return;
+    }
+    e.preventDefault();
+    if (panel) panel.classList.toggle('visible');
+    updatePanelState();
+  });
+
+  if (expandBtn) expandBtn.addEventListener('click', function(e){
+    e.stopPropagation();
+    var url = fabWrap && fabWrap.dataset.fullAiUrl;
+    if (url) window.location.href = url;
+  });
+
+  document.addEventListener('click', function(e){
+    if (panel && panel.classList.contains('visible') && !panel.contains(e.target) && !(fabWrap && fabWrap.contains(e.target))) {
+      panel.classList.remove('visible');
+      updatePanelState();
+    }
+  });
+
+  function appendMsg(text, role) {
+    var d = document.createElement('div');
+    d.className = 'ai-msg ' + role;
+    d.innerHTML = '<div class="ai-msg-bubble">' + text.replace(/</g,'&lt;') + '</div>';
+    if (msgs) { msgs.appendChild(d); msgs.scrollTop = msgs.scrollHeight; }
+  }
+
+  function doSend() {
+    var text = input && input.value && input.value.trim();
+    if (!text) return;
+    appendMsg(text, 'user');
+    input.value = '';
+    var tid = 'ty' + Date.now();
+    var t = document.createElement('div');
+    t.className = 'ai-msg ai'; t.id = tid;
+    t.innerHTML = '<div class="ai-msg-bubble" style="opacity:.5;font-style:italic;">Thinking…</div>';
+    if (msgs) { msgs.appendChild(t); msgs.scrollTop = msgs.scrollHeight; }
+
+    fetch('/api/ai-chat/', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': (document.cookie.split(';').find(function(x){
+          return x.trim().startsWith('csrftoken=');
+        }) || '=').split('=')[1].trim()
+      },
+      body: JSON.stringify({ message: text })
+    })
+    .then(function(r){ return r.json(); })
+    .then(function(data){
+      var el = document.getElementById(tid);
+      if (el) el.remove();
+      appendMsg(data.response || 'Sorry, try again.', 'ai');
+    })
+    .catch(function(){
+      var el = document.getElementById(tid);
+      if (el) el.remove();
+      appendMsg('Could not reach AI. Please try again.', 'ai');
+    });
+  }
+  if (send) send.addEventListener('click', doSend);
+  if (input) input.addEventListener('keydown', function(e){ if (e.key === 'Enter') doSend(); });
+  updatePanelPosition();
+  scheduleFabIdle();
 })();
 
 /* ── Profile Modal ─────────────────────────────────────────────────────────── */
@@ -202,69 +241,78 @@ document.getElementById('settingsNavBtn') && document.getElementById('settingsNa
   }
 });
 
-/* ── Channel List ──────────────────────────────────────────────────────────── */
+/* ── Direct Message Add / Sidebar helpers ─────────────────────────────────── */
 (function () {
-  var list    = document.getElementById('channelList');
-  var wrap    = document.getElementById('addChannelInputWrap');
-  var input   = document.getElementById('addChannelInput');
-  var addBtn  = document.getElementById('addChannelBtn');
-  var confBtn = document.getElementById('confirmAddChannelBtn');
-  var cancelBtn = document.getElementById('cancelAddChannelBtn');
+  var addDmBtn   = document.getElementById('addDmBtn');
+  var addDmWrap  = document.getElementById('dmAddWrap');
+  var addDmInput = document.getElementById('addDmInput');
+  var confirmAddDmBtn = document.getElementById('confirmAddDmBtn');
+  var cancelAddDmBtn  = document.getElementById('cancelAddDmBtn');
 
-  function wsId() { return window.currentWorkspaceId || 'default'; }
+  function getMemberId(name) {
+    if (!window.WORKSPACE_MEMBER_MAP) return null;
+    var key = name.trim();
+    if (!key) return null;
+    if (window.WORKSPACE_MEMBER_MAP[key]) return window.WORKSPACE_MEMBER_MAP[key];
+    key = key.toLowerCase();
+    return Object.keys(window.WORKSPACE_MEMBER_MAP).reduce(function(found, k) {
+      return found || (k.toLowerCase() === key ? window.WORKSPACE_MEMBER_MAP[k] : null);
+    }, null);
+  }
 
-  function render() {
-    if (!list) return;
-    var stored = [];
-    try { stored = JSON.parse(localStorage.getItem('ch_' + wsId()) || '[]'); } catch(e){}
-    var names = stored.length ? stored : ['general','announcements','random'];
-    list.innerHTML = '';
-    names.forEach(function(name, i){
-      var btn = document.createElement('button');
-      btn.className = 'nav-item' + (i === 0 ? ' active' : '');
-      btn.style.paddingLeft = '10px';
-      btn.innerHTML = '<span style="opacity:.4">#</span> ' + name;
-      btn.addEventListener('click', function(){
-        list.querySelectorAll('.nav-item').forEach(function(b){ b.classList.remove('active'); });
-        btn.classList.add('active');
-        var t = document.getElementById('chatChannelTitle');
-        if (t) t.textContent = name;
-        var inp = document.getElementById('chatInput');
-        if (inp) inp.placeholder = 'Message #' + name;
-      });
-      list.appendChild(btn);
+  function closeAddDm() {
+    if (addDmInput) addDmInput.value = '';
+    if (addDmWrap) addDmWrap.style.display = 'none';
+  }
+
+  function createDM() {
+    if (!addDmInput) return;
+    var raw = addDmInput.value.trim();
+    if (!raw) return;
+    var displayName = raw.replace(/^@/, '').trim();
+    var memberId = getMemberId(displayName);
+    if (!memberId) {
+      alert('Member not found. Please enter a valid workspace member name or username.');
+      return;
+    }
+
+    var existing = document.querySelector('.dm-item[data-dm-user-id="' + memberId + '"]');
+    if (existing) {
+      existing.click();
+    } else {
+      var container = addDmWrap ? addDmWrap.parentElement : null;
+      if (container) {
+        var btn = document.createElement('button');
+        btn.className = 'dm-item';
+        btn.type = 'button';
+        btn.dataset.dmUserId = memberId;
+        btn.innerHTML = '<span class="status-dot offline"></span>' + displayName + '<span class="badge dm-badge" data-dm-user-id="' + memberId + '" style="display:none;"></span>';
+        btn.addEventListener('click', function() {
+          if (typeof openDM === 'function') openDM(memberId, displayName);
+        });
+        container.insertBefore(btn, addDmWrap.nextSibling);
+        btn.click();
+      }
+    }
+    closeAddDm();
+  }
+
+  if (addDmBtn && addDmWrap && addDmInput && confirmAddDmBtn && cancelAddDmBtn) {
+    addDmBtn.addEventListener('click', function() {
+      if (addDmWrap) addDmWrap.style.display = addDmWrap.style.display === 'none' ? 'flex' : 'none';
+      if (addDmInput) addDmInput.focus();
+    });
+    confirmAddDmBtn.addEventListener('click', createDM);
+    cancelAddDmBtn.addEventListener('click', closeAddDm);
+    addDmInput.addEventListener('keydown', function(e){
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        createDM();
+      } else if (e.key === 'Escape') {
+        closeAddDm();
+      }
     });
   }
-
-  function addChannel() {
-    var name = input && input.value && input.value.trim().toLowerCase().replace(/\s+/g,'-');
-    if (!name) return;
-    var key    = 'ch_' + wsId();
-    var stored = [];
-    try { stored = JSON.parse(localStorage.getItem(key) || '[]'); } catch(e){}
-    if (!stored.includes(name)) { stored.push(name); localStorage.setItem(key, JSON.stringify(stored)); }
-    if (input) input.value = '';
-    if (wrap)  wrap.style.display = 'none';
-    render();
-  }
-
-  if (addBtn) {
-    addBtn.addEventListener('click', function(){ 
-      if (wrap) wrap.style.display = wrap.style.display === 'none' ? 'block' : 'none'; 
-      if (input) input.focus(); 
-    });
-  }
-  
-  if (cancelBtn) {
-    cancelBtn.addEventListener('click', function() {
-      if (input) input.value = '';
-      if (wrap) wrap.style.display = 'none';
-    });
-  }
-
-  if (confBtn) confBtn.addEventListener('click', addChannel);
-  if (input)   input.addEventListener('keydown', function(e){ if (e.key === 'Enter') addChannel(); });
-  render();
 })();
 
 /* ── Notification Manager ── */
@@ -548,4 +596,149 @@ window.NotificationManager = (function () {
 /* ── Boot NotificationManager after DOM is ready ───────────────────────────── */
 document.addEventListener('DOMContentLoaded', function(){
   window.NotificationManager.init();
+});
+/* ── Mobile sidebar toggle + action buttons ─────────────────────
+   Replace the previous mobile toggle block at the END of base_layout.js
+─────────────────────────────────────────────────────────────────── */
+document.addEventListener('DOMContentLoaded', function () {
+  var sidebar  = document.getElementById('sidebar');
+  var mainArea = document.querySelector('.main-area');
+  if (!sidebar || !mainArea) return;
+
+  /* ── Backdrop ── */
+  var backdrop = document.createElement('div');
+  backdrop.className = 'sidebar-backdrop';
+  backdrop.id = 'sidebarBackdrop';
+  document.body.appendChild(backdrop);
+
+  /* ── Grab call/video/info buttons from the desktop view-header ── */
+  var desktopCallBtn  = document.querySelector('.view-header-right .icon-btn[title="Call"]');
+  var desktopVideoBtn = document.querySelector('.view-header-right .icon-btn[title="Video"]');
+  var desktopInfoBtn  = document.querySelector('.view-header-right .icon-btn[title="Info"]');
+
+  /* ── Build mobile topbar ── */
+  var wsName    = document.querySelector('.ws-selector-name');
+  var titleText = wsName ? wsName.textContent.trim() : 'KollabHub';
+
+  var topbar = document.createElement('div');
+  topbar.className = 'mobile-topbar';
+  topbar.id = 'mobileTopbar';
+
+  /* Hamburger */
+  var hamburger = document.createElement('button');
+  hamburger.className = 'sidebar-toggle';
+  hamburger.id = 'sidebarToggleBtn';
+  hamburger.setAttribute('aria-label', 'Menu');
+  hamburger.innerHTML =
+    '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">' +
+      '<line x1="3" y1="6"  x2="21" y2="6"/>' +
+      '<line x1="3" y1="12" x2="21" y2="12"/>' +
+      '<line x1="3" y1="18" x2="21" y2="18"/>' +
+    '</svg>';
+
+  /* Title */
+  var titleEl = document.createElement('span');
+  titleEl.className = 'mobile-topbar-title';
+  titleEl.id = 'mobileTopbarTitle';
+  titleEl.textContent = titleText;
+
+  /* Actions container */
+  var actionsEl = document.createElement('div');
+  actionsEl.className = 'mobile-topbar-actions';
+  actionsEl.id = 'mobileTopbarActions';
+
+  /* Helper: clone a desktop button as a mobile-action-btn */
+  function makeMobileBtn(sourceBtn, title, svgContent) {
+    var btn = document.createElement('button');
+    btn.className = 'mobile-action-btn';
+    btn.title = title;
+    btn.setAttribute('aria-label', title);
+    btn.innerHTML = svgContent;
+
+    /* Forward clicks to the original desktop button */
+    btn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      if (sourceBtn) sourceBtn.click();
+    });
+    return btn;
+  }
+
+  /* Call button */
+  var callSvg =
+    '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
+      '<path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07' +
+      'A19.5 19.5 0 0 1 4.19 11.9 19.79 19.79 0 0 1 1.12 3.24' +
+      'A2 2 0 0 1 3.11 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81' +
+      'a2 2 0 0 1-.45 2.11L7.09 8.91a16 16 0 0 0 6 6l1.27-1.27' +
+      'a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>' +
+    '</svg>';
+
+  /* Video button */
+  var videoSvg =
+    '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
+      '<path d="m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.87' +
+      'a.5.5 0 0 0-.752-.432L16 10.5"/>' +
+      '<rect x="2" y="6" width="14" height="12" rx="2"/>' +
+    '</svg>';
+
+  /* Info button */
+  var infoSvg =
+    '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
+      '<circle cx="12" cy="12" r="10"/>' +
+      '<path d="M12 16v-4"/>' +
+      '<path d="M12 8h.01"/>' +
+    '</svg>';
+
+  var mobileCallBtn  = makeMobileBtn(desktopCallBtn,  'Call',  callSvg);
+  var mobileVideoBtn = makeMobileBtn(desktopVideoBtn, 'Video', videoSvg);
+  var mobileInfoBtn  = makeMobileBtn(desktopInfoBtn,  'Info',  infoSvg);
+
+  actionsEl.appendChild(mobileCallBtn);
+  actionsEl.appendChild(mobileVideoBtn);
+  actionsEl.appendChild(mobileInfoBtn);
+
+  topbar.appendChild(hamburger);
+  topbar.appendChild(titleEl);
+  topbar.appendChild(actionsEl);
+
+  mainArea.insertBefore(topbar, mainArea.firstChild);
+
+  /* ── Open / close ── */
+  function openSidebar() {
+    sidebar.classList.add('open');
+    backdrop.classList.add('visible');
+    document.body.style.overflow = 'hidden';
+  }
+  function closeSidebar() {
+    sidebar.classList.remove('open');
+    backdrop.classList.remove('visible');
+    document.body.style.overflow = '';
+  }
+
+  hamburger.addEventListener('click', function (e) {
+    e.stopPropagation();
+    sidebar.classList.contains('open') ? closeSidebar() : openSidebar();
+  });
+
+  backdrop.addEventListener('click', closeSidebar);
+
+  sidebar.querySelectorAll('a, .nav-item, .dm-item, .channel-item').forEach(function (el) {
+    el.addEventListener('click', function () {
+      if (window.innerWidth <= 640) closeSidebar();
+    });
+  });
+
+  /* ── Sync mobile title with active channel ── */
+  var chatTitle   = document.getElementById('chatChannelTitle');
+  var mobileTitle = document.getElementById('mobileTopbarTitle');
+  if (chatTitle && mobileTitle) {
+    new MutationObserver(function () {
+      mobileTitle.textContent = chatTitle.textContent.trim();
+    }).observe(chatTitle, { childList: true, characterData: true, subtree: true });
+  }
+
+  /* ── Reset on resize to desktop ── */
+  window.addEventListener('resize', function () {
+    if (window.innerWidth > 640) closeSidebar();
+  });
 });

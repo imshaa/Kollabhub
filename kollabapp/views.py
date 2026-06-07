@@ -1474,7 +1474,26 @@ def _delete_daily_room(room_name):
         )
     except Exception:
         pass
- 
+
+
+def _check_daily_room_exists(room_name):
+    """Return True if the Daily room still exists, False if it is deleted, None if unknown."""
+    try:
+        resp = http_requests.get(
+            f'{settings.DAILY_API_URL}/rooms/{room_name}',
+            headers=_daily_headers(),
+            timeout=5,
+        )
+    except Exception as exc:
+        logger.warning(f'check_daily_room_exists failed: {exc}')
+        return None
+
+    if resp.status_code == 404:
+        return False
+    if resp.ok:
+        return True
+    logger.warning(f'Unexpected Daily room status for {room_name}: {resp.status_code}')
+    return None
  
 # ── Call API views ────────────────────────────────────────────────
  
@@ -1496,6 +1515,13 @@ def active_call(request, workspace_id):
     ).select_related('initiated_by').first()
  
     if not call:
+        return JsonResponse({'active': False})
+ 
+    room_status = _check_daily_room_exists(call.room_name)
+    if room_status is False:
+        call.is_active = False
+        call.ended_at = timezone.now()
+        call.save(update_fields=['is_active', 'ended_at'])
         return JsonResponse({'active': False})
  
     display_name = (
@@ -3359,21 +3385,30 @@ def ai_chat_legacy(request):
 
 
 def ai(request, workspace_id):
-    # 1. Verify the workspace exists
-    workspace = get_object_or_404(Workspace, id=workspace_id)
-    
-    # 2. Check if your AI service is working/available
-    ai_is_working = True  # Replace with your actual AI API check logic
-    
-    if not ai_is_working:
-        # Redirect user back to the taskboard page safely
-        return redirect('taskboard', workspace_id=workspace_id)
-        
-    # 3. If it works, load the AI page with workspace context
-    context = {
+    membership = WorkspaceMembership.objects.filter(
+        user=request.user, workspace_id=workspace_id
+    ).first()
+
+    if not membership:
+        messages.error(request, "You are not part of this workspace.")
+        return redirect("workspace")
+
+    workspace = membership.workspace
+    members = WorkspaceMembership.objects.filter(
+        workspace=workspace
+    ).select_related("user")
+    dm_members = members.exclude(user=request.user)
+    notification_counts = _get_notification_counts(workspace, request.user)
+
+    return render(request, 'ai.html', {
         'workspace': workspace,
-    }
-    return render(request, 'ai.html', context)
+        'members': members,
+        'dm_members': dm_members,
+        'notification_counts': notification_counts,
+        'notification_counts_json': json.dumps(notification_counts),
+        'is_ai_page': True,
+        'base_template': 'base_layout.html',
+    })
 
 @login_required
 def ai_history(request, workspace_id):

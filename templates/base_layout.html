@@ -35,7 +35,7 @@
     <nav class="sidebar-nav">
       <a href="{% url 'profile' %}" class="nav-item" id="backToWorkspacesBtn">
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
-        Workspaces
+        Dashboard
       </a>
 
       {% if workspace %}
@@ -52,7 +52,8 @@
         Tasks
         <span class="badge nav-badge" id="taskNavBadge" style="display:none;"></span>
       </a>
-      <a href="#" class="nav-item {% block nav_ai %}{% endblock %}" id="aiNavBtn">
+       <!-- Kollab AI -->
+      <a href="{% url 'ai' workspace.id %}" class="nav-item {% block nav_ai %}{% endblock %}" id="aiNavBtn">
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>
         Kollab AI
       </a>
@@ -122,6 +123,40 @@
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>
   </button>
 
+  
+  <div class="ai-panel" id="aiPanel">
+    <div class="ai-panel-header">
+      <div class="ai-header-info">
+        <div class="ai-avatar">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg>
+        </div>
+        <div>
+          <p class="ai-name">Kollab AI</p>
+          <p class="ai-tagline">Always here to help</p>
+        </div>
+      </div>
+      <div class="ai-panel-actions">
+        <button class="icon-btn ai-expand-btn" id="aiExpandBtn" title="Open full AI page">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 17l7-7"/><path d="M8 10h7v7"/></svg>
+        </button>
+        <button class="icon-btn" id="aiClose" title="Close AI panel">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="ai-messages" id="aiMessages">
+      <div class="ai-msg ai">
+        <div class="ai-msg-bubble">Hi! I can help you summarize meetings, suggest tasks, or optimize your workflow. What do you need?</div>
+      </div>
+    </div>
+    <div class="ai-input-wrap">
+      <input type="text" id="aiInput" class="ai-input" placeholder="Ask Kollab AI anything…"/>
+      <button class="ai-send" id="aiSend">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>
+      </button>
+    </div>
+  </div>
+<!-- 
   <div class="ai-panel" id="aiPanel">
     <div class="ai-panel-header">
       <div class="ai-header-info">
@@ -148,7 +183,7 @@
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>
       </button>
     </div>
-  </div>
+  </div> -->
 
 </div>
 

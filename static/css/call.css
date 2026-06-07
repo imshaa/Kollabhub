@@ -352,3 +352,113 @@
   transform : translateY(-12px);
   pointer-events: none;
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   CALL UI — RESPONSIVE PATCH
+   Paste at the VERY BOTTOM of call.css
+═══════════════════════════════════════════════════════════════ */
+
+/* ── Tablet ≤ 900px ───────────────────────────────────────── */
+@media (max-width: 900px) {
+  .call-modal-box {
+    width: 96vw;
+    height: min(88vh, 600px);
+  }
+  .call-modal-header { padding: 10px 16px; }
+  .call-modal-end-btn { padding: 7px 14px; font-size: .8rem; }
+}
+
+/* ── Mobile ≤ 640px ───────────────────────────────────────── */
+@media (max-width: 640px) {
+
+  /* Incoming call banner — centered bottom pill */
+  .incoming-call-banner {
+    top: auto;
+    bottom: 16px;
+    left: 12px;
+    right: 12px;
+    min-width: unset;
+    max-width: unset;
+    border-radius: 18px;
+  }
+
+  .incoming-call-inner {
+    padding: 12px 14px;
+    gap: 10px;
+  }
+
+  .incoming-call-avatar {
+    width: 38px;
+    height: 38px;
+    font-size: .95rem;
+  }
+
+  .incoming-call-name  { font-size: .88rem; }
+  .incoming-call-label { font-size: .72rem; }
+
+  .call-action-btn {
+    width: 38px;
+    height: 38px;
+  }
+
+  /* Call modal — full screen on mobile */
+  .call-modal-overlay {
+    padding: 0;
+    align-items: stretch;
+  }
+
+  .call-modal-box {
+    width: 100%;
+    height: 100dvh;
+    border-radius: 0;
+    border: none;
+  }
+
+  .call-modal-header {
+    padding: 10px 14px;
+    height: 52px;
+  }
+
+  .call-modal-title  { font-size: .82rem; gap: 6px; }
+  .call-modal-title svg { width: 14px; height: 14px; }
+
+  .call-modal-end-btn {
+    padding: 7px 12px;
+    font-size: .78rem;
+    gap: 5px;
+    border-radius: 8px;
+  }
+
+  /* Daily iframe fills screen below header */
+  .call-modal-frame-wrap {
+    flex: 1;
+    min-height: 0;
+  }
+
+  .call-modal-frame-wrap iframe {
+    border-radius: 0;
+  }
+
+  /* Connecting spinner */
+  .call-connecting-msg { font-size: .82rem; gap: 12px; }
+  .call-spinner { width: 28px; height: 28px; }
+
+  /* Live banner */
+  .incoming-call-banner.call-live {
+    bottom: 16px;
+  }
+
+  /* Live pill compact */
+  .call-live-pill {
+    font-size: .62rem;
+    padding: 2px 6px;
+  }
+}
+
+/* ── Very small ≤ 380px ───────────────────────────────────── */
+@media (max-width: 380px) {
+  .incoming-call-inner { padding: 10px 12px; gap: 8px; }
+  .incoming-call-avatar { width: 34px; height: 34px; }
+  .call-action-btn { width: 34px; height: 34px; }
+  .call-modal-end-btn { padding: 6px 10px; font-size: .74rem; }
+}

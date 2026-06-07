@@ -1,37 +1,125 @@
-{% extends base_template %}
+{% extends 'base_layout.html' %}
 {% load static %}
 
-{% block title %}AI Assistant – {{ workspace.title }}{% endblock %}
+{% block title %}KollabHub — AI Assistant{% endblock %}
 
 {% block extra_css %}
-  <link rel="stylesheet" href="{% static 'css/ai.css' %}" />
+<link rel="stylesheet" href="{% static 'css/ai.css' %}"/>
 {% endblock %}
 
 {% block main_content %}
-  <section class="ai-page-hero" style="padding: 60px 24px; text-align: center;">
-    <div style="max-width: 700px; margin: 0 auto;">
-      <h1 style="font-size: 2.4rem; margin-bottom: 16px;">Workspace AI Assistant</h1>
-      <p style="font-size: 1rem; color: #d2d6dc; margin-bottom: 28px; line-height: 1.6;">
-        Ask Kollab AI about your workspace, summarize conversations, or get recommendations that stay scoped to this workspace.
-      </p>
-      <button class="btn-primary" id="openAiPanelBtn" type="button" style="padding: 14px 26px; font-size: 1rem;">
-        Open AI Assistant
+
+<main class="ai-page">
+  
+  <header class="topbar">
+    <div class="topbar-l">
+      <div class="badge">
+        <div class="badge-dot"></div>
+        <span class="badge-txt">AI Active</span>
+      </div>
+      <h1 class="page-title">AI Assistant</h1>
+    </div>
+    <div class="topbar-r">
+      <button class="tbtn" id="exportBtn" title="Export chat">
+        <svg fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24">
+          <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+          <polyline points="7 10 12 15 17 10"/>
+          <line x1="12" y1="15" x2="12" y2="3"/>
+        </svg>
+        Export
+      </button>
+      <button class="tbtn del" id="clearBtn" title="Clear chat">
+        <svg fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24">
+          <polyline points="3 6 5 6 21 6"/>
+          <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/>
+          <path d="M10 11v6M14 11v6M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/>
+        </svg>
+        Clear
       </button>
     </div>
-  </section>
-{% endblock %}
+  </header>
 
-{% block extra_js %}
-<script>
-  document.addEventListener('DOMContentLoaded', function () {
-    var openBtn = document.getElementById('openAiPanelBtn');
-    if (!openBtn) return;
-    openBtn.addEventListener('click', function () {
-      var fab = document.getElementById('aiFab');
-      if (fab) {
-        fab.click();
-      }
-    });
-  });
-</script>
+  <div class="chat" id="chat">
+    <!-- Welcome screen -->
+    <div class="welcome" id="welcome">
+      <div class="orb-wrap">
+        <div class="orb-ring"></div>
+        <div class="big-orb">
+          <svg fill="none" stroke="currentColor" stroke-width="1.4" viewBox="0 0 24 24">
+            <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
+          </svg>
+        </div>
+      </div>
+      <div>
+        <h2 class="w-title">How can I help<span> you?</span></h2>
+        <p class="w-sub" style="margin-top:10px">Ask about your projects, brainstorm ideas, draft content, or analyse data — all in one place.</p>
+      </div>
+      <div class="sugg-grid">
+        <div class="sugg" data-p="Summarise this week's project updates and highlight any blockers.">
+          <span class="sugg-icon">📋</span>
+          <p class="sugg-txt">Summarise project updates & surface blockers</p>
+        </div>
+        <div class="sugg" data-p="Draft a project brief template for a new product launch.">
+          <span class="sugg-icon">✍️</span>
+          <p class="sugg-txt">Draft a project brief for a product launch</p>
+        </div>
+        <div class="sugg" data-p="What are the best practices for running effective remote team standups?">
+          <span class="sugg-icon">🤝</span>
+          <p class="sugg-txt">Best practices for remote team standups</p>
+        </div>
+        <div class="sugg" data-p="Help me write a compelling feature request for our engineering team.">
+          <span class="sugg-icon">⚙️</span>
+          <p class="sugg-txt">Write a compelling feature request for devs</p>
+        </div>
+      </div>
+    </div>
+
+    <div id="msgs"></div>
+
+    <div class="typing hidden" id="typing">
+      <div class="mava ai">
+        <svg fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" width="13" height="13">
+          <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
+        </svg>
+      </div>
+      <div class="dots">
+        <span></span>
+        <span></span>
+        <span></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="input-wrap">
+    <div class="input-glass">
+      <textarea id="inp" placeholder="Ask anything…" rows="1" aria-label="Message"></textarea>
+      <div class="iactions">
+        <button class="iabtn" id="attBtn" title="Attach a file">
+          <svg fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24">
+            <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/>
+          </svg>
+        </button>
+        <button class="sbtn" id="sendBtn" disabled title="Send message (Enter)">
+          <svg fill="none" stroke="currentColor" stroke-width="2.1" viewBox="0 0 24 24">
+            <line x1="22" y1="2" x2="11" y2="13"/>
+            <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+    <div class="ifooter">
+      <span class="hint"><kbd>Enter</kbd> send &nbsp;·&nbsp; <kbd>Shift+Enter</kbd> new line</span>
+    </div>
+  </div>
+
+</main>
+
+<!-- Hidden file input -->
+<input type="file" id="fileInput" style="display: none;" accept="*/*">
+
+<!-- Toast notification -->
+<div class="toast" id="toast"></div>
+
+<script src="{% static 'js/ai.js' %}"></script>
+
 {% endblock %}
