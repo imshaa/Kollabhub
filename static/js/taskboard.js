@@ -301,42 +301,10 @@ async function loadAll() {
     if (window.NotificationManager) {
       window.NotificationManager.markRead('taskboard');
     }
-    initSortable();
   } catch(err) {
     showBoardError('Could not load board. ' + err.message);
   }
 }
-
-function initSortable() {
-  if (typeof Sortable === 'undefined') return;
-
-  const containers = $$('.kanban-cards');
-  containers.forEach(el => {
-    Sortable.create(el, {
-      group: 'tasks',
-      animation: 150,
-      ghostClass: 'task-ghost',
-      draggable: '.task-card',
-      onEnd: async (evt) => {
-        const taskId = evt.item.dataset.id;
-        const newListId = evt.to.id.replace('cards-', '');
-        
-        if (evt.from === evt.to && evt.oldIndex === evt.newIndex) return;
-
-        try {
-          await api(`/api/workspace/${WORKSPACE_ID}/tasks/${taskId}/update/`, 'PATCH', {
-            task_list_id: parseInt(newListId, 10)
-          });
-          showToast('Task moved', 'success');
-        } catch (err) {
-          showToast('Move failed: ' + err.message, 'error');
-          renderBoard(); // Revert UI
-        }
-      }
-    });
-  });
-}
-
 
 /* ══════════════════════════════════════════════════════════
    BOARD SETTINGS MODAL
@@ -517,8 +485,6 @@ function renderBoard() {
     addColEl.addEventListener('click', () => openColModal('add'));
     kanban.appendChild(addColEl);
   }
-
-  initSortable();
 }
 
 /* ── Card ─────────────────────────────────────────────────── */

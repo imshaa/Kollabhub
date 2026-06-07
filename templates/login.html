@@ -2,108 +2,612 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sign In - KollabHub</title>
-    <link rel="stylesheet" href="{% static 'css/main.css' %}">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sign In — KollabHub</title>
+  <link rel="stylesheet" href="{% static 'css/main.css' %}" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <!-- <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet" /> -->
+  <link rel="stylesheet" href="{% static 'css/auth.css' %}" />
 </head>
 
 <body class="auth-page">
 
-<!-- Background Glows -->
-<div class="auth-bg">
-    <div class="auth-glow auth-glow-left"></div>
-    <div class="auth-glow auth-glow-right"></div>
-</div>
+  <div class="kh-bg">
+    <div class="kh-grid"></div>
+    <div class="kh-orb kh-orb-1"></div>
+    <div class="kh-orb kh-orb-2"></div>
+  </div>
 
-<!-- Back Button -->
-<a href="{% url 'home' %}" class="back-link">
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>
-    </svg>
-    Back
-</a>
+  <!-- ════════════════════════════════════════
+       SCREEN: LOGIN
+  ════════════════════════════════════════ -->
+  <div class="kh-wrap animate-in" id="screenLogin">
 
-<div class="auth-container" id="authContainer">
-    <div class="auth-header">
-        <div class="auth-logo">K</div>
-        <h1 class="auth-title">Welcome Back</h1>
-        <p class="auth-subtitle">Sign in to access your workspace</p>
+    <a href="{% url 'home' %}" class="kh-back">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="m12 5-7 7 7 7"/></svg>
+      Back
+    </a>
+
+    <div class="kh-header">
+      <div class="kh-logo">K</div>
+      <h1 class="kh-title">Welcome back</h1>
+      <p class="kh-sub">Sign in to your workspace</p>
     </div>
 
-    <div class="auth-card">
-        {% if error %}
-        <div class="error-wrapper">
-            <div class="error-message">
-                <span class="error-icon">⚠</span>
-                <span class="error-text">{{ error }}</span>
-            </div>
+    <div class="kh-card">
+      {% if error %}
+      <div class="kh-alert kh-alert-error" id="loginError">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        {{ error }}
+      </div>
+      {% endif %}
+
+      <form method="POST" id="loginForm" action="{% url 'login' %}">
+        {% csrf_token %}
+
+        <div class="kh-field">
+          <label class="kh-label">Email or username</label>
+          <div class="kh-input-wrap">
+            <svg class="kh-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-8 16-8 16 0"/></svg>
+            <input type="text" name="email_or_username" class="kh-input" placeholder="email or username" autocomplete="username" required />
+          </div>
         </div>
-        {% endif %}
 
-        <form method="POST" class="auth-form" id="loginForm">
-            {% csrf_token %}
-            <div class="form-group">
-                <label class="form-label">Username</label>
-                <div class="input-wrapper">
-                    <svg class="input-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <circle cx="12" cy="8" r="4"/><path d="M4 20c0-8 16-8 16 0"/>
-                    </svg>
-                    <input type="text" name="username" class="form-input" placeholder="Enter your username" required>
-                </div>
-            </div>
-
-            <div class="form-group">
-                <label class="form-label">Password</label>
-                <div class="input-wrapper">
-                    <svg class="input-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-                    </svg>
-                    <input type="password" name="password" class="form-input" placeholder="••••••••" required>
-                </div>
-                <div class="form-helper">
-                    <a href="#" class="forgot-link">Forgot password?</a>
-                </div>
-            </div>
-
-            <button type="submit" class="btn btn-primary btn-lg btn-full">
-                Sign In
+        <div class="kh-field">
+          <div class="kh-label-row">
+            <label class="kh-label">Password</label>
+            <button type="button" class="kh-text-btn" id="showForgot">Forgot password?</button>
+          </div>
+          <div class="kh-input-wrap">
+            <svg class="kh-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            <input type="password" name="password" id="loginPwd" class="kh-input" placeholder="••••••••" autocomplete="current-password" required />
+            <button type="button" class="kh-eye" id="toggleLoginPwd" aria-label="Toggle password">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
             </button>
-        </form>
-
-        <div class="auth-footer">
-            Don't have an account? 
-            <a href="{% url 'signup' %}" class="auth-link">Create one</a>
+          </div>
         </div>
+
+        <button type="submit" class="kh-btn">
+          <span class="kh-btn-text">Sign In</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+        </button>
+      </form>
+
+      <p class="kh-foot">No account yet? <a href="{% url 'signup' %}" class="kh-link">Create one</a></p>
     </div>
-</div>
+  </div>
 
-<script>
-    document.addEventListener('DOMContentLoaded', () => {
-        const authContainer = document.getElementById('authContainer');
-        if (authContainer) {
-            authContainer.style.opacity = '0';
-            authContainer.style.transform = 'translateY(20px)';
-            setTimeout(() => {
-                authContainer.style.transition = 'all 0.5s ease';
-                authContainer.style.opacity = '1';
-                authContainer.style.transform = 'translateY(0)';
-            }, 100);
-        }
+  <!-- ════════════════════════════════════════
+       SCREEN: FORGOT PASSWORD (enter email)
+  ════════════════════════════════════════ -->
+  <div class="kh-wrap kh-hidden" id="screenForgot">
 
-        // Error message auto-dismiss
-        const errorBox = document.querySelector(".error-wrapper");
-        if (errorBox) {
-            setTimeout(() => {
-                errorBox.style.opacity = "0";
-                errorBox.style.transform = "translateY(-10px)";
-                setTimeout(() => errorBox.remove(), 300);
-            }, 4000);
+    <button type="button" class="kh-back" id="backToLogin">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="m12 5-7 7 7 7"/></svg>
+      Back to login
+    </button>
+
+    <div class="kh-header">
+      <div class="kh-logo" style="font-size:1.4rem;">🔑</div>
+      <h1 class="kh-title">Forgot password?</h1>
+      <p class="kh-sub">We'll send a reset code to your email</p>
+    </div>
+
+    <div class="kh-card">
+      <div id="forgotAlert"></div>
+
+      <form id="forgotForm">
+        {% csrf_token %}
+        <div class="kh-field">
+          <label class="kh-label">Email address</label>
+          <div class="kh-input-wrap">
+            <svg class="kh-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+            <input type="email" id="forgotEmail" class="kh-input" placeholder="you@company.com" required />
+          </div>
+        </div>
+
+        <button type="submit" class="kh-btn" id="sendOtpBtn">
+          <span class="kh-btn-text">Send Reset Code</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════════
+       SCREEN: FORGOT OTP (verify reset code)
+  ════════════════════════════════════════ -->
+  <div class="kh-wrap kh-hidden" id="screenForgotOtp">
+
+    <button type="button" class="kh-back" id="backToForgot">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="m12 5-7 7 7 7"/></svg>
+      Back
+    </button>
+
+    <div class="kh-header">
+      <div class="kh-logo kh-logo-verify">✓</div>
+      <h1 class="kh-title">Enter reset code</h1>
+      <p class="kh-sub">Sent to <strong class="kh-email-highlight" id="forgotEmailDisplay"></strong></p>
+    </div>
+
+    <div class="kh-card">
+      <div id="forgotOtpAlert"></div>
+
+      <div class="kh-info-banner">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+        Code expires in <strong>10 minutes</strong>. Check spam if you don't see it.
+      </div>
+
+      <div class="kh-field">
+        <label class="kh-label" style="text-align:center;display:block;">Enter 6-digit code</label>
+        <div class="kh-otp-grid" id="forgotOtpGrid">
+          <input class="kh-otp-cell" type="text" inputmode="numeric" maxlength="1" data-grid="forgot" data-idx="0" />
+          <input class="kh-otp-cell" type="text" inputmode="numeric" maxlength="1" data-grid="forgot" data-idx="1" />
+          <input class="kh-otp-cell" type="text" inputmode="numeric" maxlength="1" data-grid="forgot" data-idx="2" />
+          <input class="kh-otp-cell" type="text" inputmode="numeric" maxlength="1" data-grid="forgot" data-idx="3" />
+          <input class="kh-otp-cell" type="text" inputmode="numeric" maxlength="1" data-grid="forgot" data-idx="4" />
+          <input class="kh-otp-cell" type="text" inputmode="numeric" maxlength="1" data-grid="forgot" data-idx="5" />
+        </div>
+      </div>
+
+      <button type="button" class="kh-btn" id="verifyResetBtn" disabled>
+        <span class="kh-btn-text">Continue</span>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+      </button>
+
+      <div class="kh-resend">
+        <span>Didn't receive it?</span>
+        <button type="button" class="kh-link kh-resend-btn" id="resendBtn">Resend code</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════════
+       SCREEN: RESET PASSWORD (new password)
+  ════════════════════════════════════════ -->
+  <div class="kh-wrap kh-hidden" id="screenReset">
+
+    <button type="button" class="kh-back" id="backToForgotOtp">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="m12 5-7 7 7 7"/></svg>
+      Back
+    </button>
+
+    <div class="kh-header">
+      <div class="kh-logo" style="font-size:1.4rem;">🔐</div>
+      <h1 class="kh-title">New password</h1>
+      <p class="kh-sub">Choose a strong password for your account</p>
+    </div>
+
+    <div class="kh-card">
+      <div id="resetAlert"></div>
+
+      <form id="resetForm">
+        {% csrf_token %}
+
+        <div class="kh-field">
+          <label class="kh-label">New password <span class="kh-req">*</span></label>
+          <div class="kh-input-wrap">
+            <svg class="kh-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            <input type="password" id="newPwd" class="kh-input" placeholder="Create a strong password" required />
+            <button type="button" class="kh-eye" id="toggleNewPwd">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            </button>
+          </div>
+
+          <div class="kh-strength-wrap" id="resetStrengthWrap">
+            <div class="kh-strength-bars">
+              <span class="kh-bar" id="rbar0"></span>
+              <span class="kh-bar" id="rbar1"></span>
+              <span class="kh-bar" id="rbar2"></span>
+              <span class="kh-bar" id="rbar3"></span>
+            </div>
+            <span class="kh-strength-label" id="resetStrengthLabel"></span>
+          </div>
+
+          <ul class="kh-reqs" id="resetReqList">
+            <li class="kh-req-item" id="rreq-length"><span class="kh-req-dot"></span>At least 8 characters</li>
+            <li class="kh-req-item" id="rreq-upper"><span class="kh-req-dot"></span>One uppercase letter (A–Z)</li>
+            <li class="kh-req-item" id="rreq-lower"><span class="kh-req-dot"></span>One lowercase letter (a–z)</li>
+            <li class="kh-req-item" id="rreq-digit"><span class="kh-req-dot"></span>One digit (0–9)</li>
+            <li class="kh-req-item" id="rreq-special"><span class="kh-req-dot"></span>One special character (!@#$%^&amp;*)</li>
+          </ul>
+        </div>
+
+        <div class="kh-field">
+          <label class="kh-label">Confirm password <span class="kh-req">*</span></label>
+          <div class="kh-input-wrap">
+            <svg class="kh-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            <input type="password" id="newPwdConfirm" class="kh-input" placeholder="Repeat password" required />
+          </div>
+          <span class="kh-field-msg" id="resetConfirmMsg"></span>
+        </div>
+
+        <button type="submit" class="kh-btn" id="resetSubmitBtn" disabled>
+          <span class="kh-btn-text">Reset Password</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════════
+       SCREEN: SUCCESS
+  ════════════════════════════════════════ -->
+  <div class="kh-wrap kh-hidden" id="screenSuccess">
+    <div class="kh-header">
+      <div class="kh-logo kh-logo-success">✓</div>
+      <h1 class="kh-title">Password reset!</h1>
+      <p class="kh-sub">Redirecting you to login…</p>
+    </div>
+  </div>
+
+
+  <script>
+  // ─────────────────────────────────────────────────────────────
+  //  LOGIN PAGE JAVASCRIPT
+  //  Handles: login form, forgot-password AJAX flow (4 screens),
+  //  password strength meter, OTP grid inputs.
+  //
+  //  The forgot/reset flow uses AJAX to call Django URLs so the
+  //  page never reloads. Map these to your URL config:
+  //    POST /forgot-password/         → forgot_password_view
+  //    POST /forgot-password/verify/  → forgot_password_verify_otp
+  //    POST /reset-password/          → reset_password_view  (custom AJAX endpoint)
+  // ─────────────────────────────────────────────────────────────
+
+  (function () {
+
+    // ── Screen switcher ─────────────────────────────────────────
+    const allScreens = ['screenLogin','screenForgot','screenForgotOtp','screenReset','screenSuccess'];
+
+    function showScreen(id) {
+      allScreens.forEach(s => {
+        const el = document.getElementById(s);
+        if (el.id === id) {
+          el.classList.remove('kh-hidden');
+          el.classList.add('animate-in');
+        } else {
+          el.classList.add('kh-hidden');
+          el.classList.remove('animate-in');
         }
+      });
+    }
+
+    // ── State ───────────────────────────────────────────────────
+    let resetEmail = '';
+    let resetOtp   = '';
+
+    // ── Password show/hide (login) ───────────────────────────────
+    const loginPwd     = document.getElementById('loginPwd');
+    const toggleLoginBtn = document.getElementById('toggleLoginPwd');
+    toggleLoginBtn.addEventListener('click', () => {
+      loginPwd.type = loginPwd.type === 'password' ? 'text' : 'password';
     });
-</script>
+
+    // ── Auto-dismiss server error ────────────────────────────────
+    const loginError = document.getElementById('loginError');
+    if (loginError) {
+      setTimeout(() => {
+        loginError.style.opacity = '0';
+        loginError.style.transform = 'translateY(-8px)';
+        setTimeout(() => loginError.remove(), 400);
+      }, 6000);
+    }
+
+    // ── Navigation buttons ───────────────────────────────────────
+    document.getElementById('showForgot').addEventListener('click', () => showScreen('screenForgot'));
+    document.getElementById('backToLogin').addEventListener('click', () => showScreen('screenLogin'));
+    document.getElementById('backToForgot').addEventListener('click', () => showScreen('screenForgot'));
+    document.getElementById('backToForgotOtp').addEventListener('click', () => showScreen('screenForgotOtp'));
+
+    // ── CSRF helper ──────────────────────────────────────────────
+    function getCsrf() {
+      return document.cookie.split('; ')
+        .find(r => r.startsWith('csrftoken='))?.split('=')[1] || '';
+    }
+
+    // ── Alert helper ─────────────────────────────────────────────
+    function showAlert(containerId, message, type = 'error') {
+      const el = document.getElementById(containerId);
+      el.innerHTML = `
+        <div class="kh-alert kh-alert-${type}">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            ${type === 'error'
+              ? '<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>'
+              : '<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>'}
+          </svg>
+          ${message}
+        </div>`;
+      // Auto-dismiss after 5s
+      setTimeout(() => { el.innerHTML = ''; }, 5000);
+    }
+
+    function setLoading(btn, loading) {
+      btn.disabled = loading;
+      const span = btn.querySelector('.kh-btn-text');
+      if (span) span.textContent = loading ? 'Sending…' : btn.dataset.label || span.textContent;
+    }
+
+    // ── STEP 1: Send forgot-password OTP ─────────────────────────
+    document.getElementById('forgotForm').addEventListener('submit', async e => {
+      e.preventDefault();
+      const email = document.getElementById('forgotEmail').value.trim();
+      if (!email) return;
+
+      const btn = document.getElementById('sendOtpBtn');
+      setLoading(btn, true);
+      btn.querySelector('.kh-btn-text').textContent = 'Sending…';
+
+      try {
+        const res = await fetch('{% url "forgot_password" %}', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'X-CSRFToken': getCsrf(),
+            'X-Requested-With': 'XMLHttpRequest',   // ← tells Django to return JSON
+          },
+          body: new URLSearchParams({ email }),
+        });
+        const data = await res.json();
+
+        if (data.ok) {
+          resetEmail = email;
+          document.getElementById('forgotEmailDisplay').textContent = email;
+          showScreen('screenForgotOtp');
+          setTimeout(() => {
+            document.querySelector('#forgotOtpGrid .kh-otp-cell').focus();
+          }, 300);
+          startResendCooldown(60);   // start cooldown on the resend button
+        } else {
+          showAlert('forgotAlert', data.error || 'Something went wrong. Please try again.');
+        }
+      } catch {
+        showAlert('forgotAlert', 'Network error. Please check your connection.');
+      } finally {
+        setLoading(btn, false);
+        btn.querySelector('.kh-btn-text').textContent = 'Send Reset Code';
+      }
+    });
+
+    // ── STEP 2: Forgot-password OTP grid ─────────────────────────
+    const forgotCells  = Array.from(document.querySelectorAll('#forgotOtpGrid .kh-otp-cell'));
+    const verifyResetBtn = document.getElementById('verifyResetBtn');
+
+    function syncForgotOtp() {
+      resetOtp = forgotCells.map(c => c.value).join('');
+      verifyResetBtn.disabled = resetOtp.length !== 6;
+    }
+
+    initOtpGrid(forgotCells, syncForgotOtp);
+
+    verifyResetBtn.addEventListener('click', async () => {
+      if (resetOtp.length !== 6) return;
+      setLoading(verifyResetBtn, true);
+      verifyResetBtn.querySelector('.kh-btn-text').textContent = 'Verifying…';
+
+      try {
+        const res = await fetch(`/forgot-password/verify-otp/${encodeURIComponent(resetEmail)}/`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'X-CSRFToken': getCsrf(),
+            'X-Requested-With': 'XMLHttpRequest',
+          },
+          body: new URLSearchParams({ otp: resetOtp }),
+        });
+
+        const data = await res.json().catch(() => ({ ok: false, error: 'Invalid or expired code. Please try again.' }));
+        if (data.ok) {
+          showScreen('screenReset');
+        } else {
+          const errMsg = data.error || 'Invalid or expired code. Please try again.';
+          showAlert('forgotOtpAlert', errMsg);
+          forgotCells.forEach(c => { c.value = ''; c.classList.remove('filled'); });
+          forgotCells[0].focus();
+          syncForgotOtp();
+        }
+      } catch {
+        showAlert('forgotOtpAlert', 'Network error. Please try again.');
+      } finally {
+        setLoading(verifyResetBtn, false);
+        verifyResetBtn.querySelector('.kh-btn-text').textContent = 'Continue';
+      }
+    });
+
+    // Resend OTP
+    const resendBtnEl   = document.getElementById('resendBtn');
+    const resendTimerEl = document.createElement('span');
+    resendTimerEl.style.cssText = 'font-size:12px;color:var(--kh-text-faint);display:none;';
+    resendBtnEl.parentNode.insertBefore(resendTimerEl, resendBtnEl.nextSibling);
+
+    function startResendCooldown(seconds) {
+      resendBtnEl.style.display   = 'none';
+      resendTimerEl.style.display = 'inline';
+      let remaining = seconds;
+      resendTimerEl.textContent   = `Resend in ${remaining}s`;
+      const iv = setInterval(() => {
+        remaining--;
+        resendTimerEl.textContent = `Resend in ${remaining}s`;
+        if (remaining <= 0) {
+          clearInterval(iv);
+          resendTimerEl.style.display = 'none';
+          resendBtnEl.style.display   = 'inline';
+        }
+      }, 1000);
+    }
+
+    resendBtnEl.addEventListener('click', async () => {
+      if (!resetEmail) return;
+      resendBtnEl.disabled = true;
+      try {
+        const res  = await fetch('/otp/resend/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() },
+          body: JSON.stringify({ email: resetEmail, purpose: 'forgot_password' }),
+        });
+        const data = await res.json();
+        if (data.ok) {
+          showAlert('forgotOtpAlert', 'New code sent — check your inbox.', 'success');
+          startResendCooldown(60);
+        } else {
+          showAlert('forgotOtpAlert', data.error || 'Failed to resend.');
+          resendBtnEl.disabled = false;
+        }
+      } catch {
+        showAlert('forgotOtpAlert', 'Network error. Please try again.');
+        resendBtnEl.disabled = false;
+      }
+    });
+
+    // ── STEP 3: Reset password form ───────────────────────────────
+    const newPwd         = document.getElementById('newPwd');
+    const newPwdConfirm  = document.getElementById('newPwdConfirm');
+    const resetSubmitBtn = document.getElementById('resetSubmitBtn');
+    const resetConfirmMsg = document.getElementById('resetConfirmMsg');
+    const toggleNewPwdBtn = document.getElementById('toggleNewPwd');
+
+    toggleNewPwdBtn.addEventListener('click', () => {
+      newPwd.type = newPwd.type === 'password' ? 'text' : 'password';
+    });
+
+    const resetChecks = {
+      'rreq-length':  p => p.length >= 8,
+      'rreq-upper':   p => /[A-Z]/.test(p),
+      'rreq-lower':   p => /[a-z]/.test(p),
+      'rreq-digit':   p => /[0-9]/.test(p),
+      'rreq-special': p => /[!@#$%^&*()\-_=+\[\]{};:'",.<>?/\\|`~]/.test(p),
+    };
+
+    newPwd.addEventListener('input', () => {
+      const pwd = newPwd.value;
+      const wrap = document.getElementById('resetStrengthWrap');
+      const reqList = document.getElementById('resetReqList');
+
+      if (pwd.length > 0) {
+        wrap.classList.add('visible');
+        reqList.classList.add('visible');
+      } else {
+        wrap.classList.remove('visible');
+        reqList.classList.remove('visible');
+      }
+
+      let metCount = 0;
+      for (const [id, fn] of Object.entries(resetChecks)) {
+        const met = fn(pwd);
+        document.getElementById(id).classList.toggle('met', met);
+        if (met) metCount++;
+      }
+
+      const strengthConfig = [
+        { label: 'Weak', cls: 'weak', bars: 1 },
+        { label: 'Fair', cls: 'fair', bars: 2 },
+        { label: 'Good', cls: 'good', bars: 3 },
+        { label: 'Strong', cls: 'strong', bars: 4 },
+      ];
+      const level = Math.max(0, metCount - 1);
+      const cfg   = pwd.length === 0 ? null : strengthConfig[level];
+      for (let i = 0; i < 4; i++) {
+        const bar = document.getElementById('rbar' + i);
+        bar.className = 'kh-bar';
+        if (cfg && i < cfg.bars) bar.classList.add(cfg.cls);
+      }
+      const lbl = document.getElementById('resetStrengthLabel');
+      lbl.textContent = cfg ? cfg.label : '';
+      lbl.className   = 'kh-strength-label' + (cfg ? ' ' + cfg.cls : '');
+
+      validateResetConfirm();
+      updateResetBtn();
+    });
+
+    newPwdConfirm.addEventListener('input', () => { validateResetConfirm(); updateResetBtn(); });
+
+    function validateResetConfirm() {
+      const cfm = newPwdConfirm.value;
+      if (!cfm) { resetConfirmMsg.textContent = ''; resetConfirmMsg.className = 'kh-field-msg'; return; }
+      if (newPwd.value === cfm) {
+        resetConfirmMsg.textContent = '✓ Passwords match';
+        resetConfirmMsg.className   = 'kh-field-msg success';
+      } else {
+        resetConfirmMsg.textContent = '✗ Passwords do not match';
+        resetConfirmMsg.className   = 'kh-field-msg error';
+      }
+    }
+
+    function updateResetBtn() {
+      const allMet  = Object.entries(resetChecks).every(([id, fn]) => fn(newPwd.value));
+      const matchOk = newPwd.value === newPwdConfirm.value && newPwdConfirm.value.length > 0;
+      resetSubmitBtn.disabled = !(allMet && matchOk);
+    }
+
+    document.getElementById('resetForm').addEventListener('submit', async e => {
+      e.preventDefault();
+      setLoading(resetSubmitBtn, true);
+      resetSubmitBtn.querySelector('.kh-btn-text').textContent = 'Resetting…';
+
+      try {
+        const res = await fetch(`/reset-password/${encodeURIComponent(resetEmail)}/`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'X-CSRFToken': getCsrf(),
+            'X-Requested-With': 'XMLHttpRequest',
+          },
+          body: new URLSearchParams({
+            new_password: newPwd.value,
+            confirm_password: newPwdConfirm.value,
+          }),
+        });
+
+        const data = await res.json().catch(() => ({ ok: false, error: 'Failed to reset password. Please try again.' }));
+        if (data.ok) {
+          showScreen('screenSuccess');
+          setTimeout(() => { window.location.href = '{% url "login" %}'; }, 2200);
+        } else {
+          showAlert('resetAlert', data.error || 'Failed to reset password. Please try again.');
+        }
+      } catch {
+        showAlert('resetAlert', 'Network error. Please try again.');
+      } finally {
+        setLoading(resetSubmitBtn, false);
+        resetSubmitBtn.querySelector('.kh-btn-text').textContent = 'Reset Password';
+      }
+    });
+
+    // ── Shared OTP grid initialiser ───────────────────────────────
+    function initOtpGrid(cells, onSync) {
+      cells.forEach((cell, idx) => {
+        cell.addEventListener('input', () => {
+          cell.value = cell.value.replace(/\D/g, '').slice(-1);
+          cell.classList.toggle('filled', cell.value !== '');
+          if (cell.value && idx < cells.length - 1) cells[idx + 1].focus();
+          onSync();
+        });
+        cell.addEventListener('keydown', e => {
+          if (e.key === 'Backspace' && !cell.value && idx > 0) {
+            cells[idx - 1].value = '';
+            cells[idx - 1].classList.remove('filled');
+            cells[idx - 1].focus();
+            onSync();
+          }
+          if (e.key === 'ArrowLeft'  && idx > 0) cells[idx - 1].focus();
+          if (e.key === 'ArrowRight' && idx < cells.length - 1) cells[idx + 1].focus();
+        });
+        cell.addEventListener('paste', e => {
+          e.preventDefault();
+          const digits = (e.clipboardData || window.clipboardData)
+            .getData('text').replace(/\D/g, '').slice(0, 6);
+          digits.split('').forEach((d, i) => {
+            if (cells[i]) { cells[i].value = d; cells[i].classList.add('filled'); }
+          });
+          onSync();
+          cells[Math.min(digits.length, cells.length - 1)].focus();
+        });
+      });
+    }
+
+  })();
+  </script>
 
 </body>
 </html>

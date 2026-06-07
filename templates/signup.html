@@ -2,122 +2,290 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sign Up - KollabHub</title>
-    
-    <link rel="stylesheet" href="{% static 'css/main.css' %}">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Create Account — KollabHub</title>
+  <link rel="stylesheet" href="{% static 'css/main.css' %}" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <!-- <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet" /> -->
+  <link rel="stylesheet" href="{% static 'css/auth.css' %}" />
 </head>
 
-<body class="auth-page">
+<body class="auth-page" id="authBody">
 
-<!-- Background -->
-<div class="auth-bg">
-    <div class="auth-glow auth-glow-right"></div>
-    <div class="auth-glow auth-glow-left"></div>
-</div>
+  <!-- Animated background grid -->
+  <div class="kh-bg">
+    <div class="kh-grid"></div>
+    <div class="kh-orb kh-orb-1"></div>
+    <div class="kh-orb kh-orb-2"></div>
+  </div>
 
-<!-- Back Button -->
-<a href="{% url 'home' %}" class="back-link">
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>
-    </svg>
-    Back
-</a>
+  <!-- ═══════════════════════════════════════════════
+       SCREEN 1 — SIGNUP FORM
+  ════════════════════════════════════════════════ -->
+  <div class="kh-wrap" id="screenSignup">
 
-<div class="auth-container" id="authContainer">
-    <div class="auth-header">
-        <div class="auth-logo">K</div>
-        <h1 class="auth-title">Create Account</h1>
-        <p class="auth-subtitle">Join KollabHub and start collaborating</p>
+    <a href="{% url 'home' %}" class="kh-back">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="m12 5-7 7 7 7"/></svg>
+      Back
+    </a>
+
+    <div class="kh-header">
+      <div class="kh-logo">K</div>
+      <h1 class="kh-title">Join KollabHub</h1>
+      <p class="kh-sub">Build, collaborate, and ship faster</p>
     </div>
 
-    <div class="auth-card">
-        {% if error %}
-        <div class="error-wrapper">
-            <div class="error-message">
-                <span class="error-icon">⚠</span>
-                <span class="error-text">{{ error }}</span>
-            </div>
+    <div class="kh-card">
+
+      <!-- Django error from POST -->
+      {% if error %}
+      <div class="kh-alert kh-alert-error" id="djangoError">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        {{ error }}
+      </div>
+      {% endif %}
+
+      <form method="POST" id="signupForm" novalidate>
+        {% csrf_token %}
+
+        <!-- Email -->
+        <div class="kh-field">
+          <label class="kh-label">Email address <span class="kh-req">*</span></label>
+          <div class="kh-input-wrap">
+            <svg class="kh-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+            <input type="email" name="email" id="emailInput" class="kh-input" placeholder="you@company.com" value="{{ email|default:'' }}" autocomplete="email" required />
+          </div>
+          <span class="kh-field-msg" id="emailMsg"></span>
         </div>
-        {% endif %}
 
-        <form method="POST" class="auth-form" id="signupForm">
-            {% csrf_token %}
-            
-            <div class="form-group">
-                <label class="form-label">Username</label>
-                <div class="input-wrapper">
-                    <svg class="input-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <circle cx="12" cy="8" r="4"/><path d="M4 20c0-8 16-8 16 0"/>
-                    </svg>
-                    <input type="text" name="username" class="form-input" placeholder="Choose a username" required>
-                </div>
-            </div>
+        <!-- Username -->
+        <div class="kh-field">
+          <label class="kh-label">Username <span class="kh-optional">(optional)</span></label>
+          <div class="kh-input-wrap">
+            <svg class="kh-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-8 16-8 16 0"/></svg>
+            <input type="text" name="username" id="usernameInput" class="kh-input" placeholder="e.g. alexmorgan" autocomplete="username" />
+          </div>
+        </div>
 
-            <div class="form-group">
-                <label class="form-label">Email Address</label>
-                <div class="input-wrapper">
-                    <svg class="input-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/>
-                    </svg>
-                    <input type="email" name="email" class="form-input" placeholder="name@company.com" required>
-                </div>
-            </div>
-
-            <div class="form-grid">
-                <div class="form-group">
-                    <label class="form-label">Password</label>
-                    <div class="input-wrapper">
-                        <input type="password" name="password" class="form-input" placeholder="••••••••" required>
-                    </div>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Confirm</label>
-                    <div class="input-wrapper">
-                        <input type="password" name="confirm_password" class="form-input" placeholder="••••••••" required>
-                    </div>
-                </div>
-            </div>
-
-            <button type="submit" class="btn btn-primary btn-lg btn-full" style="margin-top: 1rem;">
-                Create Account
+        <!-- Password -->
+        <div class="kh-field">
+          <label class="kh-label">Password <span class="kh-req">*</span></label>
+          <div class="kh-input-wrap">
+            <svg class="kh-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            <input type="password" name="password" id="passwordInput" class="kh-input" placeholder="Create a strong password" autocomplete="new-password" required />
+            <button type="button" class="kh-eye" id="togglePassword" aria-label="Show password">
+              <svg id="eyeIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
             </button>
-        </form>
+          </div>
 
-        <div class="auth-footer">
-            Already have an account? 
-            <a href="{% url 'login' %}" class="auth-link">Sign In</a>
+          <!-- Strength meter — hidden until user starts typing -->
+          <div class="kh-strength-wrap" id="strengthWrap">
+            <div class="kh-strength-bars">
+              <span class="kh-bar" id="bar0"></span>
+              <span class="kh-bar" id="bar1"></span>
+              <span class="kh-bar" id="bar2"></span>
+              <span class="kh-bar" id="bar3"></span>
+            </div>
+            <span class="kh-strength-label" id="strengthLabel"></span>
+          </div>
+
+          <!-- Requirements checklist — hidden until user starts typing -->
+          <ul class="kh-reqs" id="reqList">
+            <li class="kh-req-item" id="req-length">
+              <span class="kh-req-dot"></span>At least 8 characters
+            </li>
+            <li class="kh-req-item" id="req-upper">
+              <span class="kh-req-dot"></span>One uppercase letter (A–Z)
+            </li>
+            <li class="kh-req-item" id="req-lower">
+              <span class="kh-req-dot"></span>One lowercase letter (a–z)
+            </li>
+            <li class="kh-req-item" id="req-digit">
+              <span class="kh-req-dot"></span>One digit (0–9)
+            </li>
+            <li class="kh-req-item" id="req-special">
+              <span class="kh-req-dot"></span>One special character (!@#$%^&amp;*)
+            </li>
+          </ul>
         </div>
+
+        <!-- Confirm password -->
+        <div class="kh-field">
+          <label class="kh-label">Confirm password <span class="kh-req">*</span></label>
+          <div class="kh-input-wrap">
+            <svg class="kh-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            <input type="password" name="confirm_password" id="confirmInput" class="kh-input" placeholder="Re-enter your password" autocomplete="new-password" required />
+          </div>
+          <span class="kh-field-msg" id="confirmMsg"></span>
+        </div>
+
+        <button type="submit" class="kh-btn" id="signupBtn" disabled>
+          <span class="kh-btn-text">Create Account</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+        </button>
+      </form>
+
+      <p class="kh-foot">Already have an account? <a href="{% url 'login' %}" class="kh-link">Sign in</a></p>
     </div>
-</div>
+  </div>
 
-<script>
-    document.addEventListener('DOMContentLoaded', () => {
-        const authContainer = document.getElementById('authContainer');
-        if (authContainer) {
-            authContainer.style.opacity = '0';
-            authContainer.style.transform = 'translateY(20px)';
-            setTimeout(() => {
-                authContainer.style.transition = 'all 0.5s ease';
-                authContainer.style.opacity = '1';
-                authContainer.style.transform = 'translateY(0)';
-            }, 100);
-        }
+  <!-- ═══════════════════════════════════════════════
+       SCREEN 2 — OTP VERIFICATION  
+       Shown when Django redirects here after signup
+       OR toggled by JS if you want a SPA feel.
+       Django renders this page via signup_verify_otp view.
+  ════════════════════════════════════════════════ -->
+  <!-- 
+    NOTE: This block is rendered by the SEPARATE view signup_verify_otp.
+    Keep it in this file only if you merge the views. Otherwise the
+    OTP screen lives in signup_verify_otp.html which is output below.
+    The JS below handles client-side OTP input only — submission goes
+    to the Django view via normal form POST.
+  -->
 
-        // Error message auto-dismiss
-        const errorBox = document.querySelector(".error-wrapper");
-        if (errorBox) {
-            setTimeout(() => {
-                errorBox.style.opacity = "0";
-                errorBox.style.transform = "translateY(-10px)";
-                setTimeout(() => errorBox.remove(), 300);
-            }, 4000);
-        }
+  <script>
+  // ─────────────────────────────────────────────────────────────
+  //  SIGNUP PAGE JAVASCRIPT
+  // ─────────────────────────────────────────────────────────────
+
+  (function () {
+    const emailInput    = document.getElementById('emailInput');
+    const passwordInput = document.getElementById('passwordInput');
+    const confirmInput  = document.getElementById('confirmInput');
+    const signupBtn     = document.getElementById('signupBtn');
+    const strengthWrap  = document.getElementById('strengthWrap');
+    const reqList       = document.getElementById('reqList');
+    const strengthLabel = document.getElementById('strengthLabel');
+    const confirmMsg    = document.getElementById('confirmMsg');
+    const emailMsg      = document.getElementById('emailMsg');
+    const togglePwdBtn  = document.getElementById('togglePassword');
+    const eyeIcon       = document.getElementById('eyeIcon');
+
+    // ── Password show/hide ──────────────────────────────────────
+    togglePwdBtn.addEventListener('click', () => {
+      const show = passwordInput.type === 'password';
+      passwordInput.type = show ? 'text' : 'password';
+      eyeIcon.innerHTML = show
+        ? '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>'
+        : '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>';
     });
-</script>
+
+    // ── Requirements map ────────────────────────────────────────
+    const checks = {
+      'req-length':  p => p.length >= 8,
+      'req-upper':   p => /[A-Z]/.test(p),
+      'req-lower':   p => /[a-z]/.test(p),
+      'req-digit':   p => /[0-9]/.test(p),
+      'req-special': p => /[!@#$%^&*()\-_=+\[\]{};:'",.<>?/\\|`~]/.test(p),
+    };
+
+    const strengthConfig = [
+      { label: 'Weak',     cls: 'weak',   bars: 1 },
+      { label: 'Fair',     cls: 'fair',   bars: 2 },
+      { label: 'Good',     cls: 'good',   bars: 3 },
+      { label: 'Strong',   cls: 'strong', bars: 4 },
+    ];
+
+    // ── Live password validation ─────────────────────────────────
+    passwordInput.addEventListener('input', () => {
+      const pwd = passwordInput.value;
+
+      // Show requirements block once user starts typing
+      if (pwd.length > 0) {
+        strengthWrap.classList.add('visible');
+        reqList.classList.add('visible');
+      } else {
+        strengthWrap.classList.remove('visible');
+        reqList.classList.remove('visible');
+      }
+
+      // Update each requirement item
+      let metCount = 0;
+      for (const [id, fn] of Object.entries(checks)) {
+        const met = fn(pwd);
+        const el  = document.getElementById(id);
+        el.classList.toggle('met', met);
+        if (met) metCount++;
+      }
+
+      // Update strength bars
+      const level = Math.max(0, metCount - 1); // 0-3
+      const cfg   = pwd.length === 0 ? null : strengthConfig[level];
+
+      for (let i = 0; i < 4; i++) {
+        const bar = document.getElementById('bar' + i);
+        bar.className = 'kh-bar';
+        if (cfg && i < cfg.bars) bar.classList.add(cfg.cls);
+      }
+      strengthLabel.textContent = cfg ? cfg.label : '';
+      strengthLabel.className   = 'kh-strength-label' + (cfg ? ' ' + cfg.cls : '');
+
+      validateConfirm();
+      updateBtn();
+    });
+
+    // ── Confirm password match ───────────────────────────────────
+    confirmInput.addEventListener('input', validateConfirm);
+
+    function validateConfirm() {
+      const pwd = passwordInput.value;
+      const cfm = confirmInput.value;
+      if (!cfm) { confirmMsg.textContent = ''; confirmMsg.className = 'kh-field-msg'; return; }
+      if (pwd === cfm) {
+        confirmMsg.textContent = '✓ Passwords match';
+        confirmMsg.className   = 'kh-field-msg success';
+      } else {
+        confirmMsg.textContent = '✗ Passwords do not match';
+        confirmMsg.className   = 'kh-field-msg error';
+      }
+      updateBtn();
+    }
+
+    // ── Email live format check ──────────────────────────────────
+    emailInput.addEventListener('blur', () => {
+      const valid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailInput.value.trim());
+      if (emailInput.value && !valid) {
+        emailMsg.textContent = 'Please enter a valid email address';
+        emailMsg.className   = 'kh-field-msg error';
+      } else {
+        emailMsg.textContent = '';
+        emailMsg.className   = 'kh-field-msg';
+      }
+      updateBtn();
+    });
+    emailInput.addEventListener('input', () => {
+      emailMsg.textContent = '';
+      emailMsg.className   = 'kh-field-msg';
+      updateBtn();
+    });
+
+    // ── Enable/disable submit ────────────────────────────────────
+    function allReqsMet() {
+      return Object.entries(checks).every(([id, fn]) => fn(passwordInput.value));
+    }
+
+    function updateBtn() {
+      const emailOk   = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailInput.value.trim());
+      const pwdOk     = allReqsMet();
+      const matchOk   = passwordInput.value === confirmInput.value && confirmInput.value.length > 0;
+      signupBtn.disabled = !(emailOk && pwdOk && matchOk);
+    }
+
+    // ── Auto-dismiss server-side error ───────────────────────────
+    const djangoError = document.getElementById('djangoError');
+    if (djangoError) {
+      setTimeout(() => {
+        djangoError.style.opacity = '0';
+        djangoError.style.transform = 'translateY(-8px)';
+        setTimeout(() => djangoError.remove(), 400);
+      }, 6000);
+    }
+
+    // ── Entrance animation ───────────────────────────────────────
+    document.querySelector('.kh-wrap').classList.add('animate-in');
+  })();
+  </script>
 
 </body>
 </html>

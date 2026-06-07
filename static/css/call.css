@@ -1,0 +1,354 @@
+/* ═══════════════════════════════════════════════════
+   KollabHub – Call UI Styles
+   Daily.co Prebuilt integration
+═══════════════════════════════════════════════════ */
+
+/* ── Incoming Call Banner ─────────────────────────── */
+.incoming-call-banner {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 99999;
+  min-width: 320px;
+  max-width: 380px;
+  background: var(--bg-secondary, #1e1e2e);
+  border: 1.5px solid var(--accent, #3b82f6);
+  border-radius: 16px;
+  box-shadow: 0 8px 40px rgba(59, 130, 246, 0.25), 0 2px 12px rgba(0,0,0,0.4);
+  animation: callBannerSlide 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: hidden;
+}
+
+@keyframes callBannerSlide {
+  from { opacity: 0; transform: translateY(-24px) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0)     scale(1); }
+}
+
+/* Pulsing top border to draw attention */
+.incoming-call-banner::before {
+  content: '';
+  display: block;
+  height: 3px;
+  background: linear-gradient(90deg, var(--accent, #3b82f6), #60a5fa, var(--accent, #3b82f6));
+  background-size: 200%;
+  animation: callBorderPulse 1.6s ease-in-out infinite;
+}
+
+@keyframes callBorderPulse {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+.incoming-call-inner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+}
+
+.incoming-call-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent, #3b82f6), #6366f1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #fff;
+  flex-shrink: 0;
+  animation: avatarPulse 1.4s ease-in-out infinite;
+}
+
+@keyframes avatarPulse {
+  0%, 100% { box-shadow: 0 0 0 0   rgba(59,130,246,0.4); }
+  50%       { box-shadow: 0 0 0 10px rgba(59,130,246,0);   }
+}
+
+.incoming-call-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.incoming-call-name {
+  display: block;
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--text, #f1f5f9);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.incoming-call-label {
+  display: block;
+  font-size: 0.78rem;
+  color: var(--text-muted, #94a3b8);
+  margin-top: 2px;
+}
+
+.incoming-call-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.call-action-btn {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+
+.call-action-btn:hover { transform: scale(1.1); }
+
+.call-decline-btn {
+  background: #ef4444;
+  color: #fff;
+}
+.call-decline-btn svg { transform: rotate(135deg); }
+.call-decline-btn:hover { box-shadow: 0 4px 16px rgba(239,68,68,0.5); }
+
+.call-accept-btn {
+  background: #22c55e;
+  color: #fff;
+}
+.call-accept-btn:hover { box-shadow: 0 4px 16px rgba(34,197,94,0.5); }
+
+
+/* ── Call Modal Overlay ───────────────────────────── */
+.call-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50000;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: callOverlayFade 0.25s ease;
+}
+
+@keyframes callOverlayFade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.call-modal-box {
+  width: min(96vw, 1080px);
+  height: min(90vh, 680px);
+  background: var(--bg-secondary, #0f172a);
+  border: 1.5px solid var(--border, #1e293b);
+  border-radius: 20px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: callBoxZoom 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 24px 80px rgba(0,0,0,0.6);
+}
+
+@keyframes callBoxZoom {
+  from { opacity: 0; transform: scale(0.92); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+.call-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px;
+  background: var(--bg, #0a0f1e);
+  border-bottom: 1px solid var(--border, #1e293b);
+  flex-shrink: 0;
+}
+
+.call-modal-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--text, #f1f5f9);
+}
+
+.call-modal-end-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background: #ef4444;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.83rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+}
+
+.call-modal-end-btn:hover {
+  background: #dc2626;
+  transform: scale(1.02);
+}
+
+.call-modal-frame-wrap {
+  flex: 1;
+  position: relative;
+  background: #000;
+  min-height: 0;
+}
+
+/* Daily iframe fills the frame wrap */
+.call-modal-frame-wrap iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: none;
+  border-radius: 0 0 20px 20px;
+}
+
+/* Connecting overlay shown before Daily loads */
+.call-connecting-msg {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  color: var(--text-muted, #94a3b8);
+  font-size: 0.9rem;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.call-spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid rgba(255,255,255,0.1);
+  border-top-color: var(--accent, #3b82f6);
+  border-radius: 50%;
+  animation: spinnerRot 0.8s linear infinite;
+}
+
+@keyframes spinnerRot {
+  to { transform: rotate(360deg); }
+}
+
+
+/* ── Responsive ───────────────────────────────────── */
+@media (max-width: 600px) {
+  .incoming-call-banner {
+    top: auto;
+    bottom: 80px;
+    left: 12px;
+    right: 12px;
+    min-width: unset;
+  }
+
+  .call-modal-box {
+    border-radius: 14px;
+    height: 95vh;
+  }
+}
+
+ 
+.incoming-call-banner.call-live {
+  border-color: #22c55e;
+  box-shadow  : 0 8px 40px rgba(34, 197, 94, 0.25), 0 2px 12px rgba(0,0,0,0.4);
+}
+ 
+.incoming-call-banner.call-live::before {
+  background      : linear-gradient(90deg, #22c55e, #4ade80, #22c55e);
+  background-size : 200%;
+  animation       : callBorderPulse 2s ease-in-out infinite;
+}
+ 
+.incoming-call-banner.call-live .incoming-call-avatar {
+  background: linear-gradient(135deg, #22c55e, #16a34a);
+}
+ 
+/* Live indicator pill */
+.call-live-pill {
+  display      : inline-flex;
+  align-items  : center;
+  gap          : 5px;
+  font-size    : .68rem;
+  font-weight  : 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color        : #22c55e;
+  background   : rgba(34,197,94,.12);
+  border       : 1px solid rgba(34,197,94,.3);
+  border-radius: 20px;
+  padding      : 2px 8px;
+  margin-top   : 3px;
+}
+.call-live-pill::before {
+  content      : '';
+  width        : 6px;
+  height       : 6px;
+  border-radius: 50%;
+  background   : #22c55e;
+  animation    : liveDot 1.2s ease-in-out infinite;
+}
+@keyframes liveDot {
+  0%, 100% { opacity: 1; transform: scale(1);   }
+  50%       { opacity: .4; transform: scale(.7); }
+}
+ 
+/* ── Decline button hidden for persistent banner ─────────────────────────── */
+/* (JS sets display:none — this is a CSS fallback) */
+.incoming-call-banner.call-live .call-decline-btn {
+  display: none;
+}
+ 
+/* ── End / Leave button label update ─────────────────────────────────────── */
+.call-modal-end-btn.leave-mode {
+  background: #f97316;   /* orange for "leave" vs red for "end" */
+}
+.call-modal-end-btn.leave-mode:hover {
+  background: #ea580c;
+}
+ 
+/* ── Connecting spinner backdrop ─────────────────────────────────────────── */
+/* Ensure spinner sits ABOVE the iframe (z-index already 1; spinner needs 2) */
+.call-connecting-msg {
+  z-index: 2;
+}
+ 
+/* ── Subtle "you are in a call" pill inside the modal header ─────────────── */
+.call-live-status {
+  display    : flex;
+  align-items: center;
+  gap        : 6px;
+  font-size  : .75rem;
+  color      : #22c55e;
+  font-weight: 600;
+}
+.call-live-status::before {
+  content      : '';
+  width        : 8px;
+  height       : 8px;
+  border-radius: 50%;
+  background   : #22c55e;
+  animation    : liveDot 1.2s ease-in-out infinite;
+}
+ 
+/* ── Smooth banner show/hide ─────────────────────────────────────────────── */
+.incoming-call-banner {
+  transition: opacity .2s, transform .2s;
+}
+.incoming-call-banner[style*="display: none"] {
+  opacity   : 0;
+  transform : translateY(-12px);
+  pointer-events: none;
+}

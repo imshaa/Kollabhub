@@ -1,30 +1,47 @@
 from django.shortcuts import render, redirect, get_object_or_404
-from django.contrib.auth import authenticate, login, logout
-from django.contrib.auth import get_user_model
-from django.views.decorators.http import require_POST, require_GET
+from django.contrib.auth import authenticate, login, logout, get_user_model
+from django.views.decorators.http import require_POST, require_GET, require_http_methods
 from django.contrib import messages
 from django.contrib import messages as django_messages
 from django.contrib.auth.decorators import login_required
+from django.conf import settings
+from django.template.loader import render_to_string
+from django.utils.html import strip_tags
+from django.core.mail import EmailMultiAlternatives
+import logging
+import requests as http_requests
+import uuid
+from datetime import timedelta        # stdlib — NOT django
+from django.utils import timezone
+from django.conf import settings
 from pathlib import Path
+import uuid as _uuid
+from kollabapp.ai_assistant import get_response
 from .supabase_storage import build_storage_path, create_signed_url, delete_file, upload_file
-from .models import CustomUser
+from .models import CustomUser, OTPVerification, WorkspaceCall
 from .models import Workspace
 from .models import WorkspaceMembership
 from .models import Message
 from .models import DirectMessage
 from .models import Invitation
+from .models import ChatFile
 from .models import Task
 from .models import TaskList, TaskComment, TaskAttachment, TaskboardSettings, Notification
-import json
+from .models import WorkspaceInvite, AIMessage
 from django.http import JsonResponse
+import json, re, random, string
 from django.db import models
 from django.db.models import Q, Count
-from django.utils import timezone
-from datetime import timedelta
+logger = logging.getLogger(__name__)
+
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
+from django.contrib.auth.hashers import make_password
+
 
 User = get_user_model()  # This gets CustomUser
+
+
 
 ALLOWED_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg"}
 ALLOWED_VIDEO_EXTENSIONS = {".mp4", ".mp3"}
@@ -33,55 +50,493 @@ ALLOWED_DOC_EXTENSIONS = {".docx", ".pdf", ".doc", ".txt"}
 def _has_allowed_extension(filename, allowed_extensions):
     return Path(filename).suffix.lower() in allowed_extensions
 
-
-# ------------------------- signup View/Login/Logout ----------------------------------
+import mimetypes as _mimetypes
+ 
+# -------------------- FOR CHAT PAGE FILE HANDLING --------------------- 
+# ── constants ──────────────────────────────────────────────────────────────────
+_IMAGE_MAX_BYTES    = 2  * 1024 * 1024   # 2 MB
+_OTHER_MAX_BYTES    = 25 * 1024 * 1024   # 25 MB
+ 
+_IMAGE_MIME_PREFIXES = ('image/',)
+_VIDEO_MIME_PREFIXES = ('video/',)
+ 
+_ALLOWED_MIME = {
+    # images
+    'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml',
+    # video
+    'video/mp4', 'video/quicktime', 'video/webm', 'video/x-msvideo',
+    # documents
+    'application/pdf',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'application/vnd.ms-powerpoint',
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    'text/plain', 'text/csv',
+    'application/zip', 'application/x-zip-compressed',
+}
+ 
+ 
+def _categorise(mime: str) -> str:
+    if mime.startswith('image/'):
+        return 'image'
+    if mime.startswith('video/'):
+        return 'video'
+    return 'document'
+ 
+ 
+def _detect_mime(file_obj) -> str:
+    """Best-effort MIME detection from file name + Django content_type."""
+    guessed, _ = _mimetypes.guess_type(file_obj.name or '')
+    return file_obj.content_type or guessed or 'application/octet-stream'
+  
+ 
+# ═══════════════════════════════════════════════════════════════════
+#  HELPERS
+# ═══════════════════════════════════════════════════════════════════
+ 
+def _otp_request_too_frequent(email, purpose, cooldown_seconds=60):
+    """True if an OTP was already created within the cooldown window."""
+    cutoff = timezone.now() - timedelta(seconds=cooldown_seconds)
+    return OTPVerification.objects.filter(
+        email=email, purpose=purpose, created_at__gte=cutoff,
+    ).exists()
+ 
+ 
+def send_otp_email(subject, template_name, context, recipient_email):
+    html_content  = render_to_string(f"emails/{template_name}", context)
+    plain_content = strip_tags(html_content)
+    msg = EmailMultiAlternatives(
+        subject=subject,
+        body=plain_content,
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        to=[recipient_email],
+    )
+    msg.attach_alternative(html_content, "text/html")
+    msg.send(fail_silently=False)
+ 
+ 
+def validate_password_strength(password):
+    errors = []
+    if len(password) < 8:
+        errors.append("Password must be at least 8 characters long.")
+    if not re.search(r'[A-Z]', password):
+        errors.append("Must contain at least one uppercase letter.")
+    if not re.search(r'[a-z]', password):
+        errors.append("Must contain at least one lowercase letter.")
+    if not re.search(r'\d', password):
+        errors.append("Must contain at least one digit.")
+    if not re.search(r'[!@#$%^&*()\-_=+\[\]{};:\'",.<>?/\\|`~]', password):
+        errors.append("Must contain at least one special character.")
+    return errors
+ 
+ 
+def _generate_otp_code():
+    return ''.join(random.choices(string.digits, k=6))
+ 
+ 
+def create_otp(email, purpose, temp_data=None):
+    """
+    Delete ALL previous OTPs for (email, purpose), then create one
+    that expires in 10 minutes.
+    """
+    OTPVerification.objects.filter(email=email, purpose=purpose).delete()
+    return OTPVerification.objects.create(
+        email=email,
+        otp_code=_generate_otp_code(),
+        purpose=purpose,
+        temp_data=temp_data or {},
+        expires_at=timezone.now() + timedelta(minutes=10),
+    )
+ 
+ 
+def verify_otp_code(email, otp_code, purpose):
+    """
+    Returns {"ok": True, "otp": <instance>}
+          | {"ok": False, "error": "<message>"}
+    """
+    try:
+        otp = OTPVerification.objects.get(
+            email=email, purpose=purpose, is_verified=False,
+        )
+    except OTPVerification.DoesNotExist:
+        return {"ok": False, "error": "No active code found. Please request a new one."}
+    except OTPVerification.MultipleObjectsReturned:
+        OTPVerification.objects.filter(
+            email=email, purpose=purpose, is_verified=False
+        ).delete()
+        return {"ok": False, "error": "Session error. Please request a new code."}
+ 
+    if otp.is_expired:
+        otp.delete()
+        return {"ok": False, "error": "This code has expired. Please request a new one."}
+ 
+    if otp.is_locked:
+        return {"ok": False, "error": "Too many incorrect attempts. Please request a new code."}
+ 
+    if otp.otp_code != otp_code.strip():
+        otp.attempts += 1
+        otp.save(update_fields=["attempts"])
+        remaining = max(0, 5 - otp.attempts)
+        if remaining == 0:
+            return {"ok": False, "error": "Too many incorrect attempts. Please request a new code."}
+        return {
+            "ok": False,
+            "error": f"Incorrect code — {remaining} attempt{'s' if remaining != 1 else ''} remaining.",
+        }
+ 
+    otp.is_verified = True
+    otp.save(update_fields=["is_verified"])
+    return {"ok": True, "otp": otp}
+ 
+ 
+# ═══════════════════════════════════════════════════════════════════
+#  SIGNUP
+# ═══════════════════════════════════════════════════════════════════
+ 
 def signup_view(request):
-    if request.method == "POST":
-        username = request.POST.get("username")
-        email = request.POST.get("email")
-        password = request.POST.get("password")
-        confirm_password = request.POST.get("confirm_password")
-
-        if password != confirm_password:
-            return render(request, "signup.html", {"error": "Passwords do not match"})
-
-        if CustomUser.objects.filter(username=username).exists():
-            return render(request, "signup.html", {"error": "Username already exists"})
-
-        if CustomUser.objects.filter(email=email).exists():
-            return render(request, "signup.html", {"error": "Email already exists"})
-
-        user = CustomUser.objects.create_user(username=username, email=email, password=password)
-        login(request, user)
+    if request.user.is_authenticated:
         return redirect("workspace")
-
+ 
+    if request.method == "POST":
+        email            = request.POST.get("email", "").strip().lower()
+        password         = request.POST.get("password", "")
+        confirm_password = request.POST.get("confirm_password", "")
+        username         = request.POST.get("username", "").strip()
+ 
+        def err(msg):
+            return render(request, "signup.html", {"error": msg, "email": email})
+ 
+        if not email:
+            return err("Email address is required.")
+        if not re.match(r'^[^\s@]+@[^\s@]+\.[^\s@]+$', email):
+            return err("Please enter a valid email address.")
+        if CustomUser.objects.filter(email=email).exists():
+            return err("This email is already registered. Please sign in.")
+ 
+        pw_errors = validate_password_strength(password)
+        if pw_errors:
+            return err(pw_errors[0])
+        if password != confirm_password:
+            return err("Passwords do not match.")
+        if username and CustomUser.objects.filter(username=username).exists():
+            return err("That username is already taken.")
+        if _otp_request_too_frequent(email, "signup"):
+            return err("A verification code was sent recently. Please wait 60 seconds.")
+ 
+        otp = create_otp(
+            email=email,
+            purpose="signup",
+            temp_data={
+                "email":    email,
+                "password": make_password(password),  # hashed — never plaintext
+                "username": username,
+            },
+        )
+ 
+        send_otp_email(
+            subject="Verify your KollabHub account",
+            template_name="verify_email.html",
+            context={"otp": otp.otp_code, "username": username or email.split("@")[0]},
+            recipient_email=email,
+        )
+ 
+        return redirect("signup_verify_otp", email=email)
+ 
     return render(request, "signup.html")
-
-
+ 
+ 
+def signup_verify_otp(request, email):
+    if request.user.is_authenticated:
+        return redirect("workspace")
+ 
+    email = email.lower()
+ 
+    if request.method == "POST":
+        otp_code = request.POST.get("otp", "").strip()
+ 
+        def err(msg):
+            return render(request, "signup_verify_otp.html", {"error": msg, "email": email})
+ 
+        if not otp_code or not otp_code.isdigit() or len(otp_code) != 6:
+            return err("Please enter the full 6-digit code.")
+ 
+        result = verify_otp_code(email, otp_code, "signup")
+        if not result["ok"]:
+            return err(result["error"])
+ 
+        otp_obj = result["otp"]
+        temp    = otp_obj.temp_data
+ 
+        # Re-check in case email was registered between steps
+        if CustomUser.objects.filter(email=email).exists():
+            otp_obj.delete()
+            return err("This email was registered while verifying. Please sign in.")
+ 
+        # Build unique username
+        base_username = temp.get("username") or email.split("@")[0]
+        username      = base_username
+        counter       = 1
+        while CustomUser.objects.filter(username=username).exists():
+            username = f"{base_username}{counter}"
+            counter += 1
+ 
+        # Create user — password already hashed
+        user          = CustomUser(username=username, email=temp["email"])
+        user.password = temp["password"]
+        user.save()
+ 
+        # Consume OTP
+        otp_obj.delete()
+ 
+        # Force-login (no need to re-authenticate since we just created the account)
+        user.backend = "django.contrib.auth.backends.ModelBackend"
+        login(request, user)
+ 
+        messages.success(request, "Account created! Welcome to KollabHub.")
+        return redirect("workspace")
+ 
+    return render(request, "signup_verify_otp.html", {"email": email})
+ 
+ 
+# ═══════════════════════════════════════════════════════════════════
+#  LOGIN
+# ═══════════════════════════════════════════════════════════════════
+ 
 def login_view(request):
     if request.user.is_authenticated:
         return redirect("workspace")
-
+ 
     if request.method == "POST":
-        username = request.POST.get("username")
-        password = request.POST.get("password")
-
-        user = authenticate(request, username=username, password=password)
-
-        if user is not None:
+        identifier = request.POST.get("email_or_username", "").strip()
+        password   = request.POST.get("password", "")
+ 
+        if not identifier or not password:
+            return render(request, "login.html",
+                          {"error": "Email/username and password are both required."})
+ 
+        user = None
+        if "@" in identifier:
+            try:
+                user_obj = CustomUser.objects.get(email=identifier.lower())
+                user = authenticate(request, username=user_obj.username, password=password)
+            except CustomUser.DoesNotExist:
+                pass
+        else:
+            user = authenticate(request, username=identifier, password=password)
+ 
+        if user:
             login(request, user)
             return redirect("workspace")
-        else:
-            return render(request, "login.html", {"error": "Invalid username or password"})
-
+ 
+        return render(request, "login.html",
+                      {"error": "Invalid email/username or password."})
+ 
     return render(request, "login.html")
-
-
-# Logout view
+ 
+ 
+# ═══════════════════════════════════════════════════════════════════
+#  FORGOT PASSWORD
+# ═══════════════════════════════════════════════════════════════════
+ 
+def forgot_password_view(request):
+    if request.user.is_authenticated:
+        return redirect("workspace")
+ 
+    is_ajax = request.headers.get("X-Requested-With") == "XMLHttpRequest"
+ 
+    if request.method == "POST":
+        email = request.POST.get("email", "").strip().lower()
+ 
+        if not email:
+            if is_ajax:
+                return JsonResponse({"ok": False, "error": "Email is required."})
+            return render(request, "login.html", {"error": "Email is required."})
+ 
+        if _otp_request_too_frequent(email, "forgot_password"):
+            msg = "A reset code was sent recently. Please wait 60 seconds."
+            if is_ajax:
+                return JsonResponse({"ok": False, "error": msg})
+            return render(request, "login.html", {"error": msg})
+ 
+        # Send only if email exists — but always redirect (no info leak)
+        try:
+            user = CustomUser.objects.get(email=email)
+            otp  = create_otp(email=email, purpose="forgot_password")
+            send_otp_email(
+                subject="KollabHub — Password Reset Code",
+                template_name="reset_password.html",
+                context={
+                    "otp":      otp.otp_code,
+                    "username": user.display_name or user.username or email.split("@")[0],
+                },
+                recipient_email=email,
+            )
+        except CustomUser.DoesNotExist:
+            pass  # silent — no enumeration
+ 
+        if is_ajax:
+            return JsonResponse({"ok": True})
+        return redirect("forgot_password_verify_otp", email=email)
+ 
+    return render(request, "login.html")
+ 
+ 
+def forgot_password_verify_otp(request, email):
+    if request.user.is_authenticated:
+        return redirect("workspace")
+ 
+    email = email.lower()
+    is_ajax = request.headers.get("X-Requested-With") == "XMLHttpRequest"
+ 
+    if request.method == "POST":
+        otp_code = request.POST.get("otp", "").strip()
+ 
+        def err(msg, status=400):
+            if is_ajax:
+                return JsonResponse({"ok": False, "error": msg}, status=status)
+            return render(request, "login.html",
+                          {"error": msg, "email": email, "screen": "forgot_otp"})
+ 
+        if not otp_code or not otp_code.isdigit() or len(otp_code) != 6:
+            return err("Please enter the full 6-digit code.")
+ 
+        result = verify_otp_code(email, otp_code, "forgot_password")
+        if not result["ok"]:
+            return err(result["error"])
+ 
+        if is_ajax:
+            return JsonResponse({"ok": True})
+        return redirect("reset_password", email=email)
+ 
+    return render(request, "login.html", {"email": email, "screen": "forgot_otp"})
+ 
+ 
+def reset_password_view(request, email):
+    if request.user.is_authenticated:
+        return redirect("workspace")
+ 
+    email = email.lower()
+    is_ajax = request.headers.get("X-Requested-With") == "XMLHttpRequest"
+ 
+    # Gate: verified OTP must exist and not be expired
+    try:
+        otp = OTPVerification.objects.get(
+            email=email, purpose="forgot_password", is_verified=True,
+        )
+    except OTPVerification.DoesNotExist:
+        if is_ajax:
+            return JsonResponse({"ok": False, "error": "Invalid or expired reset session. Please start over."}, status=400)
+        return render(request, "login.html",
+                      {"error": "Invalid or expired reset session. Please start over."})
+ 
+    if otp.is_expired:
+        otp.delete()
+        if is_ajax:
+            return JsonResponse({"ok": False, "error": "Reset session expired. Please request a new code."}, status=400)
+        return render(request, "login.html",
+                      {"error": "Reset session expired. Please request a new code."})
+ 
+    if request.method == "POST":
+        new_password     = request.POST.get("new_password", "")
+        confirm_password = request.POST.get("confirm_password", "")
+ 
+        def err(msg, status=400):
+            if is_ajax:
+                return JsonResponse({"ok": False, "error": msg}, status=status)
+            return render(request, "login.html",
+                          {"error": msg, "email": email, "screen": "reset"})
+ 
+        if not new_password:
+            return err("New password is required.")
+ 
+        pw_errors = validate_password_strength(new_password)
+        if pw_errors:
+            return err(pw_errors[0])
+        if new_password != confirm_password:
+            return err("Passwords do not match.")
+ 
+        try:
+            user = CustomUser.objects.get(email=email)
+            user.set_password(new_password)
+            user.save()
+        except CustomUser.DoesNotExist:
+            return err("Account not found.")
+ 
+        # Consume OTP — single use
+        otp.delete()
+ 
+        if is_ajax:
+            return JsonResponse({"ok": True})
+ 
+        messages.success(request, "Password reset successfully. Please sign in.")
+        return redirect("login")
+ 
+    return render(request, "login.html", {"email": email, "screen": "reset"})
+ 
+ 
+# ── Resend OTP (AJAX) ──────────────────────────────────────────────
+ 
+@require_POST
+def resend_otp(request):
+    """AJAX: POST JSON { "email": "...", "purpose": "signup|forgot_password" }"""
+    try:
+        body    = json.loads(request.body)
+        email   = body.get("email", "").strip().lower()
+        purpose = body.get("purpose", "").strip()
+    except (json.JSONDecodeError, AttributeError):
+        return JsonResponse({"ok": False, "error": "Invalid request."})
+ 
+    if not email or purpose not in ("signup", "forgot_password"):
+        return JsonResponse({"ok": False, "error": "Invalid request."})
+ 
+    if _otp_request_too_frequent(email, purpose):
+        return JsonResponse({"ok": False,
+                             "error": "Please wait 60 seconds before requesting a new code."})
+ 
+    if purpose == "signup":
+        try:
+            old = OTPVerification.objects.get(email=email, purpose="signup")
+            temp_data = old.temp_data
+        except OTPVerification.DoesNotExist:
+            return JsonResponse({"ok": False,
+                                 "error": "No pending signup found. Please start again."})
+        otp = create_otp(email=email, purpose="signup", temp_data=temp_data)
+        send_otp_email(
+            subject="Verify your KollabHub account",
+            template_name="verify_email.html",
+            context={
+                "otp":      otp.otp_code,
+                "username": temp_data.get("username") or email.split("@")[0],
+            },
+            recipient_email=email,
+        )
+    else:
+        try:
+            user = CustomUser.objects.get(email=email)
+        except CustomUser.DoesNotExist:
+            return JsonResponse({"ok": True})  # silent
+        otp = create_otp(email=email, purpose="forgot_password")
+        send_otp_email(
+            subject="KollabHub — Password Reset Code",
+            template_name="reset_password.html",
+            context={
+                "otp":      otp.otp_code,
+                "username": user.display_name or user.username or email.split("@")[0],
+            },
+            recipient_email=email,
+        )
+ 
+    return JsonResponse({"ok": True})
+ 
+ 
+# ── Logout ─────────────────────────────────────────────────────────
+ 
 def logout_view(request):
     logout(request)
-    return redirect('home')
-
+    return redirect("home")
+ 
 # -----------------------------Proile Logic -----------------------------------
 
 @login_required
@@ -157,7 +612,7 @@ def update_profile(request):
                 messages.error(request, "Profile image must be a PNG or JPG file.")
                 return redirect(request.META.get("HTTP_REFERER", "profile"))
             old_path = user.profile_picture
-            new_path = build_storage_path("profiles", profile_picture.name)
+            new_path = build_storage_path("profile_pics", profile_picture.name)
             upload_file(new_path, profile_picture, profile_picture.content_type)
             if old_path:
                 delete_file(old_path)
@@ -168,8 +623,20 @@ def update_profile(request):
 
     return redirect("home")
 
+# ---------- Profile Api --------------------
+# simple profile data endpoint used for live updates
+@login_required
+def profile_api(request):
+    user = request.user
+    data = {
+        "display_name": user.display_name,
+        "bio": user.bio,
+        "status": user.status,
+        "profile_picture": user.profile_picture_url or "",
+    }
+    return JsonResponse(data)
 
-
+#  ------------------------- Home Page ---------------------------------------
 def home(request):
     return render(request, 'home.html')
 
@@ -180,72 +647,9 @@ def is_workspace_admin(user, workspace):
     return WorkspaceMembership.objects.filter(workspace=workspace, user=user, role="admin").exists()
 
 
-# ----------------------------Chatpage Logic--------------------------------------
 
-@login_required
-def chatui(request, workspace_id):
+# ------------------------------ Workspace-page logic---------------------------
 
-    membership = WorkspaceMembership.objects.filter(
-        user=request.user, workspace_id=workspace_id
-    ).first()
-
-    if not membership:
-        messages.error(request, "You are not part of this workspace.")
-        return redirect("workspace")
-
-    workspace = membership.workspace
-
-    members = WorkspaceMembership.objects.filter(
-        workspace=workspace
-    ).select_related("user")
-
-    # exclude yourself from DM list
-    dm_members = members.exclude(user=request.user)
-
-    notification_counts = _get_notification_counts(workspace, request.user)
-
-    return render(request, "chatui.html", {
-        "workspace": workspace,
-        "members": members,
-        "dm_members": dm_members,
-        "notification_counts": notification_counts,
-        "notification_counts_json": json.dumps(notification_counts),
-    })
-
-@login_required
-def ai_page(request, workspace_id):
-    membership = WorkspaceMembership.objects.filter(
-        user=request.user, workspace_id=workspace_id
-    ).first()
-
-    if not membership:
-        messages.error(request, "You are not part of this workspace.")
-        return redirect("workspace")
-
-    workspace = membership.workspace
-
-    members = WorkspaceMembership.objects.filter(
-        workspace=workspace
-    ).select_related("user")
-
-    # exclude yourself from DM list
-    dm_members = members.exclude(user=request.user)
-
-    notification_counts = _get_notification_counts(workspace, request.user)
-
-    return render(request, "ai.html", {
-        "workspace": workspace,
-        "members": members,
-        "dm_members": dm_members,
-        "notification_counts": notification_counts,
-        "notification_counts_json": json.dumps(notification_counts),
-        "is_ai_page": True,
-        "base_template": "base_layout.html",
-    })
-
-
-
-# ------------------------------ Workspace logic---------------------------
 @login_required
 def workspace(request):
 
@@ -271,7 +675,7 @@ def workspace(request):
             if not _has_allowed_extension(image.name, ALLOWED_IMAGE_EXTENSIONS):
                 messages.error(request, "Workspace image must be a PNG or JPG file.")
                 return redirect("workspace")
-            image_path = build_storage_path("workspace_images", image.name)
+            image_path = build_storage_path("workspace_pics", image.name)
             upload_file(image_path, image, image.content_type)
 
         # NEW LIMIT: max 50 workspaces total (admin + member)
@@ -321,7 +725,7 @@ def workspace(request):
     memberships = WorkspaceMembership.objects.filter(user=request.user).select_related("workspace")
     workspaces = [m.workspace for m in memberships]
     
-    return render(request, "workspace.html", {
+    return render(request, "profile.html", {
         "workspaces": workspaces,
         "user": request.user
     })
@@ -354,7 +758,7 @@ def update_workspace_info(request, workspace_id):
             return JsonResponse({"error": "Workspace image must be under 1 MB."}, status=400)
         if not _has_allowed_extension(image.name, ALLOWED_IMAGE_EXTENSIONS):
             return JsonResponse({"error": "Workspace image must be a PNG or JPG file."}, status=400)
-        new_path = build_storage_path("workspace_images", image.name)
+        new_path = build_storage_path("workspace_pics", image.name)
         upload_file(new_path, image, image.content_type)
         if workspace.image:
             delete_file(workspace.image)
@@ -379,33 +783,28 @@ def join_workspace_manual(request):
 
     if request.method == "POST":
 
-        # the frontend now offers a generic workspace_email field;
-        # depending on whether a team email exists we validate accordingly
         email = request.POST.get("workspace_email", "").strip().lower()
         title = request.POST.get("title")
 
-        # first find a workspace with the matching title (case‑insensitive?).
         try:
             workspace = Workspace.objects.get(title=title)
         except Workspace.DoesNotExist:
             messages.error(request, "Workspace not found.")
             return redirect("profile")
 
-        # if a team email was set, joining must use that address
         if workspace.team_email:
             if email != workspace.team_email.lower():
                 messages.error(request, "Workspace not found.")
                 return redirect("profile")
         else:
-            # fall back to the admin's email for lookup
             if email != workspace.admin.email.lower():
                 messages.error(request, "Workspace not found.")
                 return redirect("profile")
 
-        # CHECK IF PRIVATE
-        if workspace.visibility == "private":
-            messages.error(request, "It's a private workspace; only admin can add members.")
-            return redirect("profile")
+        # Check if user is already a member
+        if WorkspaceMembership.objects.filter(workspace=workspace, user=request.user).exists():
+            messages.info(request, f"You are already a member of {workspace.title}.")
+            return redirect("chatui", workspace_id=workspace.id)
 
         # 50 workspace limit
         total_memberships = WorkspaceMembership.objects.filter(
@@ -416,6 +815,7 @@ def join_workspace_manual(request):
             messages.error(request, "You cannot join more than 50 workspaces.")
             return redirect("profile")
 
+        # Direct membership for both public and private workspaces.
         membership, created = WorkspaceMembership.objects.get_or_create(
             workspace=workspace,
             user=request.user,
@@ -429,123 +829,860 @@ def join_workspace_manual(request):
 
         return redirect("chatui", workspace_id=workspace.id)
 
-    return redirect("profile")   
-# adding members to workspace
+    return redirect("profile")
+
+
+
+
+# ----------------------------Chatpage Logic--------------------------------------
 
 @login_required
-def add_member_manual(request, workspace_id):
-    workspace = get_object_or_404(Workspace, id=workspace_id)
+def chatui(request, workspace_id):
 
-    # Only admins can add members
-    if not is_workspace_admin(request.user, workspace):
-        messages.error(request, "Only admins can add members.")
-        return redirect("chatui", workspace_id=workspace.id)
-
-    if request.method == "POST":
-        identifier = request.POST.get("identifier")  # username or email
-        role = request.POST.get("role", "member")   # default to member
-
-        try:
-            user = CustomUser.objects.get(
-                models.Q(username=identifier) | models.Q(email=identifier)
-            )
-        except CustomUser.DoesNotExist:
-            messages.error(request, "User not found. Ask them to signup first.")
-            return redirect("chatui", workspace_id=workspace.id)
-
-        #  Check if user is already part of 50 or more workspaces
-        existing_memberships = WorkspaceMembership.objects.filter(user=user).count()
-        if existing_memberships >= 50:
-            messages.error(request, f"{user.username} is already part of 50 workspaces and cannot be added.")
-            return redirect("chatui", workspace_id=workspace.id)
-
-        # Add the user if they are eligible
-        WorkspaceMembership.objects.get_or_create(
-            workspace=workspace, user=user, defaults={"role": role}
-        )
-        messages.success(request, f"{user.username} added to workspace as {role}!")
-        return redirect("chatui", workspace_id=workspace.id)
-
-    # Default redirect (in case of GET request or fallback)
-    return redirect("chatui", workspace_id=workspace.id)
-
-
-#  Remove a user from workspace (admin only)
-@login_required
-def remove_member(request, workspace_id):
-    workspace = get_object_or_404(Workspace, id=workspace_id)
-
-    # Only admins can remove members
     membership = WorkspaceMembership.objects.filter(
         user=request.user, workspace_id=workspace_id
     ).first()
 
-    if not membership or membership.role != "admin":
-        error_msg = "Only admins can remove members."
-        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-            return JsonResponse({'error': error_msg, 'is_admin': False}, status=403)
-        messages.error(request, error_msg)
-        return redirect("chatui", workspace_id=workspace.id)
+    if not membership:
+        messages.error(request, "You are not part of this workspace.")
+        return redirect("workspace")
 
-    if request.method == "POST":
-        username = request.POST.get("username", "").strip()
+    workspace = membership.workspace
 
-        if not username:
-            error_msg = "Username is required."
-            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-                return JsonResponse({'error': error_msg}, status=400)
-            messages.error(request, error_msg)
-            return redirect("chatui", workspace_id=workspace.id)
+    members = WorkspaceMembership.objects.filter(
+        workspace=workspace
+    ).select_related("user")
 
+    # exclude yourself from DM list
+    dm_members = members.exclude(user=request.user)
+
+    notification_counts = _get_notification_counts(workspace, request.user)
+
+    return render(request, "chatui.html", {
+        "workspace": workspace,
+        "members": members,
+        "dm_members": dm_members,
+        "notification_counts": notification_counts,
+        "notification_counts_json": json.dumps(notification_counts),
+    })
+
+
+# ── workspace chat file upload ─────────────────────────────────────────────────
+@login_required
+def upload_chat_file(request, workspace_id):
+    """
+    POST /api/workspace/<workspace_id>/upload-file/
+    Form fields: file (multipart), message_uuid (optional str)
+    Returns JSON with file metadata for WS broadcast.
+    """
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST required'}, status=405)
+ 
+    if not WorkspaceMembership.objects.filter(
+        user=request.user, workspace_id=workspace_id
+    ).exists():
+        return JsonResponse({'error': 'not a member'}, status=403)
+ 
+    uploaded = request.FILES.get('file')
+    if not uploaded:
+        return JsonResponse({'error': 'No file provided'}, status=400)
+ 
+    mime      = _detect_mime(uploaded)
+    category  = _categorise(mime)
+    file_size = uploaded.size
+ 
+    # ── validation ────────────────────────────────────────────────────────────
+    if mime not in _ALLOWED_MIME:
+        return JsonResponse({'error': f'File type "{mime}" is not allowed.'}, status=400)
+ 
+    if category == 'image' and file_size > _IMAGE_MAX_BYTES:
+        return JsonResponse({'error': 'Images must be smaller than 2 MB.'}, status=400)
+ 
+    if category != 'image' and file_size > _OTHER_MAX_BYTES:
+        return JsonResponse({'error': 'Files must be smaller than 25 MB.'}, status=400)
+ 
+    # ── store in Supabase ─────────────────────────────────────────────────────
+    folder       = f'chat_files/workspace/{workspace_id}/{category}'
+    storage_path = build_storage_path(folder, uploaded.name)
+ 
+    try:
+        upload_file(storage_path, uploaded, content_type=mime)
+    except Exception as exc:
+        logger.exception('Supabase upload error: %s', exc)
+        return JsonResponse({'error': 'File upload failed. Please try again.'}, status=500)
+ 
+    signed_url = create_signed_url(storage_path, expires_in=3600 * 24) or ''
+ 
+    # ── save workspace message + ChatFile ─────────────────────────────────────
+    workspace    = get_object_or_404(Workspace, id=workspace_id)
+    message_uuid_str = request.POST.get('message_uuid') or str(_uuid.uuid4())
+    try:
+        parsed_uuid = _uuid.UUID(str(message_uuid_str))
+    except Exception:
+        parsed_uuid = _uuid.uuid4()
+ 
+    msg = Message.objects.create(
+        workspace=workspace,
+        sender=request.user,
+        message='',            # file-only; no text body
+        message_uuid=parsed_uuid,
+    )
+ 
+    chat_file = ChatFile.objects.create(
+        workspace=workspace,
+        sender=request.user,
+        message=msg,
+        storage_path=storage_path,
+        file_url=signed_url,
+        original_name=uploaded.name,
+        mime_type=mime,
+        file_size=file_size,
+        file_category=category,
+    )
+ 
+    # ── build response ────────────────────────────────────────────────────────
+    avatar_url = '/static/Areeba.jpeg'
+    if request.user.profile_picture:
+        avatar_url = request.user.profile_picture_url
+ 
+    return JsonResponse({
+        'success':              True,
+        'file_id':              chat_file.id,
+        'file_url':             signed_url,
+        'storage_path':         storage_path,
+        'original_name':        uploaded.name,
+        'mime_type':            mime,
+        'file_size':            file_size,
+        'file_category':        category,
+        'message_id':           str(msg.message_uuid),
+        'db_id':                msg.id,
+        'sender_id':            request.user.id,
+        'sender_username':      request.user.username,
+        'sender_display_name':  getattr(request.user, 'display_name', request.user.username),
+        'sender_avatar':        avatar_url,
+        'created_at':           msg.created_at.isoformat(),
+    })
+ 
+
+# ── DM file upload ─────────────────────────────────────────────────────────────
+@login_required
+def upload_dm_file(request, workspace_id):
+    """
+    POST /api/workspace/<workspace_id>/upload-dm-file/
+    Form fields: file (multipart), receiver_id (int)
+    """
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST required'}, status=405)
+ 
+    if not WorkspaceMembership.objects.filter(
+        user=request.user, workspace_id=workspace_id
+    ).exists():
+        return JsonResponse({'error': 'not a member'}, status=403)
+ 
+    uploaded    = request.FILES.get('file')
+    receiver_id = request.POST.get('receiver_id')
+ 
+    if not uploaded:
+        return JsonResponse({'error': 'No file provided'}, status=400)
+    if not receiver_id:
+        return JsonResponse({'error': 'receiver_id required'}, status=400)
+ 
+    try:
+        receiver_id = int(receiver_id)
+    except (ValueError, TypeError):
+        return JsonResponse({'error': 'Invalid receiver_id'}, status=400)
+ 
+    mime      = _detect_mime(uploaded)
+    category  = _categorise(mime)
+    file_size = uploaded.size
+ 
+    if mime not in _ALLOWED_MIME:
+        return JsonResponse({'error': f'File type "{mime}" is not allowed.'}, status=400)
+ 
+    if category == 'image' and file_size > _IMAGE_MAX_BYTES:
+        return JsonResponse({'error': 'Images must be smaller than 2 MB.'}, status=400)
+ 
+    if category != 'image' and file_size > _OTHER_MAX_BYTES:
+        return JsonResponse({'error': 'Files must be smaller than 25 MB.'}, status=400)
+ 
+    folder       = f'chat_files/dm/{workspace_id}/{category}'
+    storage_path = build_storage_path(folder, uploaded.name)
+ 
+    try:
+        upload_file(storage_path, uploaded, content_type=mime)
+    except Exception as exc:
+        logger.exception('Supabase DM upload error: %s', exc)
+        return JsonResponse({'error': 'File upload failed. Please try again.'}, status=500)
+ 
+    signed_url = create_signed_url(storage_path, expires_in=3600 * 24) or ''
+ 
+    workspace = get_object_or_404(Workspace, id=workspace_id)
+    receiver  = get_object_or_404(CustomUser, id=receiver_id)
+ 
+    dm = DirectMessage.objects.create(
+        workspace=workspace,
+        sender=request.user,
+        receiver=receiver,
+        message='',
+    )
+ 
+    chat_file = ChatFile.objects.create(
+        workspace=workspace,
+        sender=request.user,
+        dm=dm,
+        receiver=receiver,
+        storage_path=storage_path,
+        file_url=signed_url,
+        original_name=uploaded.name,
+        mime_type=mime,
+        file_size=file_size,
+        file_category=category,
+    )
+ 
+    avatar_url = '/static/Areeba.jpeg'
+    if request.user.profile_picture:
+        avatar_url = request.user.profile_picture_url
+ 
+    return JsonResponse({
+        'success':              True,
+        'file_id':              chat_file.id,
+        'file_url':             signed_url,
+        'storage_path':         storage_path,
+        'original_name':        uploaded.name,
+        'mime_type':            mime,
+        'file_size':            file_size,
+        'file_category':        category,
+        'message_id':           str(_uuid.uuid4()),
+        'db_id':                dm.id,
+        'sender_id':            request.user.id,
+        'sender_username':      request.user.username,
+        'sender_display_name':  getattr(request.user, 'display_name', request.user.username),
+        'sender_avatar':        avatar_url,
+        'created_at':           dm.created_at.isoformat(),
+    })
+ 
+ 
+# ── refresh a signed URL (called by client when URL might be expired) ──────────
+@login_required
+def refresh_file_url(request, file_id):
+    """
+    GET /api/chat-file/<file_id>/refresh-url/
+    Returns { url } with a fresh signed URL.
+    """
+    try:
+        cf = ChatFile.objects.get(pk=file_id)
+    except ChatFile.DoesNotExist:
+        return JsonResponse({'error': 'not found'}, status=404)
+ 
+    # basic access check: sender, receiver, or workspace member
+    if cf.sender_id != request.user.id:
+        if cf.receiver_id and cf.receiver_id != request.user.id:
+            return JsonResponse({'error': 'forbidden'}, status=403)
+        if cf.workspace_id:
+            if not WorkspaceMembership.objects.filter(
+                user=request.user, workspace_id=cf.workspace_id
+            ).exists():
+                return JsonResponse({'error': 'forbidden'}, status=403)
+ 
+    return JsonResponse({'url': cf.fresh_url()})
+
+#  ---------------------   Messages API LOgic -------------------------
+
+@login_required
+def messages_api(request, workspace_id):
+    """Return recent messages for a workspace as JSON.
+
+    URL: /api/workspace/<workspace_id>/messages/?limit=100
+    """
+    # membership check
+    if not WorkspaceMembership.objects.filter(user=request.user, workspace_id=workspace_id).exists():
+        return JsonResponse({'error': 'not a member'}, status=403)
+
+    # Clean up old messages if retention policy is set
+    workspace = get_object_or_404(Workspace, id=workspace_id)
+    if workspace.message_retention_days:
+        from datetime import timedelta
+        from django.utils import timezone
+        cutoff_date = timezone.now() - timedelta(days=workspace.message_retention_days)
+        Message.objects.filter(workspace=workspace, created_at__lt=cutoff_date).delete()
+
+    # allow caller to limit number of messages (defaults to 100)
+    try:
+        limit = int(request.GET.get('limit', 100))
+    except ValueError:
+        limit = 100
+
+    msgs = (
+        Message.objects.filter(workspace_id=workspace_id)
+        .prefetch_related('files')         
+        .order_by('created_at')[:limit]
+    )
+
+    # serialize in chronological order (oldest first)
+    data = []
+    for m in msgs:
+        data.append({
+    'id':                   m.id,
+    'message_id':           str(m.message_uuid) if m.message_uuid else None,
+    'message':              m.message or '',
+    'sender_id':            m.sender.id if m.sender else None,
+    'sender_username':      m.sender.username if m.sender else None,
+    'sender_display_name':  getattr(m.sender, 'display_name', None) if m.sender else None,
+    'sender_avatar':        m.sender.profile_picture_url if (m.sender and m.sender.profile_picture) else '/static/Areeba.jpeg',
+    'created_at':           m.created_at.isoformat(),
+    'voice_url':            resolve_voice_url(request, m.voice_note) if m.voice_note else None,
+    'duration':             m.duration or 0,
+    # ── NEW: file attachments ─────────────────────────────────────────────
+    'files': [
+        {
+            'file_id':       f.id,
+            'file_url':      f.fresh_url(),
+            'original_name': f.original_name,
+            'mime_type':     f.mime_type,
+            'file_size':     f.file_size,
+            'file_category': f.file_category,
+        }
+        for f in m.files.all()
+    ],
+})
+
+
+    return JsonResponse(data, safe=False)
+
+
+@login_required
+def direct_messages_api(request, workspace_id, user_id):
+
+    if not WorkspaceMembership.objects.filter(
+        user=request.user,
+        workspace_id=workspace_id
+    ).exists():
+        return JsonResponse({"error": "not allowed"}, status=403)
+
+    messages = DirectMessage.objects.filter(
+        workspace_id=workspace_id
+    ).filter(
+        Q(sender=request.user, receiver_id=user_id) |
+        Q(sender_id=user_id, receiver=request.user)
+    ).prefetch_related('files').order_by("created_at")
+
+    data = []
+
+    for m in messages:
+         data.append({
+        'id':        m.id,
+        'message':   m.message or '',
+        'sender_id': m.sender_id,
+        'sender':    m.sender.username,
+        'created_at': m.created_at.isoformat(),
+        'voice_url': resolve_voice_url(request, m.voice_note) if m.voice_note else None,
+        'duration':  m.duration or 0,
+        'files': [
+            {
+                'file_id':       f.id,
+                'file_url':      f.fresh_url(),
+                'original_name': f.original_name,
+                'mime_type':     f.mime_type,
+                'file_size':     f.file_size,
+                'file_category': f.file_category,
+            }
+            for f in m.files.all()
+        ],
+    })
+
+    return JsonResponse(data, safe=False)
+
+@login_required
+def send_dm(request, workspace_id):
+
+    data = json.loads(request.body)
+
+    receiver_id = data.get("receiver_id")
+    message = data.get("message")
+
+    if not WorkspaceMembership.objects.filter(
+        user=request.user,
+        workspace_id=workspace_id
+    ).exists():
+        return JsonResponse({"error":"not allowed"}, status=403)
+
+    dm = DirectMessage.objects.create(
+        workspace_id=workspace_id,
+        sender=request.user,
+        receiver_id=receiver_id,
+        message=message
+    )
+
+    return JsonResponse({"success":True})
+
+
+# --------------------- Voice Notes _--------------------------------
+
+
+def resolve_voice_url(request, voice_note):
+    if not voice_note:
+        return None
+
+    # Support both stored path string and old FileField objects
+    if hasattr(voice_note, 'url'):
         try:
-            user_to_remove = CustomUser.objects.get(username=username)
-        except CustomUser.DoesNotExist:
-            error_msg = "User not found."
-            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-                return JsonResponse({'error': error_msg}, status=404)
-            messages.error(request, error_msg)
-            return redirect("chatui", workspace_id=workspace.id)
+            return request.build_absolute_uri(voice_note.url)
+        except Exception:
+            pass
 
-        # Prevent removing admin (yourself or other admins)
-        target_membership = WorkspaceMembership.objects.filter(
-            workspace=workspace, user=user_to_remove
-        ).first()
+    voice_path = str(voice_note).lstrip('/')
+    if not voice_path:
+        return None
 
-        if not target_membership:
-            error_msg = f"{username} is not in this workspace."
-            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-                return JsonResponse({'error': error_msg}, status=404)
-            messages.error(request, error_msg)
-            return redirect("chatui", workspace_id=workspace.id)
+    voice_url = create_signed_url(voice_path)
+    if voice_url:
+        return voice_url
 
-        if target_membership.role == "admin":
-            error_msg = "Admins cannot be removed from workspace."
-            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-                return JsonResponse({'error': error_msg}, status=400)
-            messages.error(request, error_msg)
-            return redirect("chatui", workspace_id=workspace.id)
-
-        # Successfully remove the member
-        target_membership.delete()
-        
-        # Clean up all invitation records for this user in this workspace
-        # This allows them to be re-added later without conflicts
-        Invitation.objects.filter(
-            workspace=workspace,
-            recipient_user=user_to_remove
-        ).delete()
-        
-        success_msg = f"{username} has been removed from {workspace.title}."
-        
-        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-            return JsonResponse({'success': True, 'message': success_msg})
-        
-        messages.success(request, success_msg)
-        return redirect("chatui", workspace_id=workspace.id)
-
-    return redirect("chatui", workspace_id=workspace.id)
+    return request.build_absolute_uri(f'/media/{voice_path}') 
 
 
+@login_required
+def send_voice_note(request, workspace_id):
+    """
+    POST /api/workspace/<workspace_id>/send-voice-note/
+    Multipart form: audio (file), duration (int, seconds), message_uuid (optional str)
+    Returns: { success, voice_url, message_id, sender_username, sender_display_name,
+                sender_avatar, sender_id, created_at, duration }
+    The view saves the file to DB and returns metadata.
+    The WebSocket broadcast is handled client-side after the HTTP response.
+    """
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST required'}, status=405)
+ 
+    if not WorkspaceMembership.objects.filter(user=request.user, workspace_id=workspace_id).exists():
+        return JsonResponse({'error': 'not a member'}, status=403)
+ 
+    audio_file  = request.FILES.get('audio')
+    duration    = request.POST.get('duration', 0)
+    message_uuid_str = request.POST.get('message_uuid') or str(_uuid.uuid4())
+ 
+    if not audio_file:
+        return JsonResponse({'error': 'No audio file provided'}, status=400)
+ 
+    try:
+        duration = int(float(duration))
+    except (ValueError, TypeError, OverflowError):
+        duration = 0
+ 
+    try:
+        parsed_uuid = _uuid.UUID(str(message_uuid_str))
+    except Exception:
+        parsed_uuid = _uuid.uuid4()
+ 
+    workspace = get_object_or_404(Workspace, id=workspace_id)
+    
+    # Upload voice note to Supabase (with local fallback)
+    voice_path = build_storage_path('voice_notes/workspace', f'voice_{parsed_uuid}.webm')
+    upload_file(voice_path, audio_file, 'audio/webm')
+    
+    msg = Message.objects.create(
+        workspace=workspace,
+        sender=request.user,
+        message='',                 # voice-only; no text
+        message_uuid=parsed_uuid,
+        voice_note=voice_path,      # store the path, not the file
+        duration=duration,
+    )
+ 
+    avatar_url = '/static/Areeba.jpeg'
+    if request.user.profile_picture:
+        avatar_url = request.user.profile_picture_url
+    
+    # Get signed URL from Supabase or local
+    voice_url = create_signed_url(voice_path)
+    if not voice_url:
+        voice_url = request.build_absolute_uri(f'/media/{voice_path}')
+ 
+    return JsonResponse({
+        'success':              True,
+        'voice_url':            voice_url,
+        'message_id':           str(msg.message_uuid),
+        'db_id':                msg.id,
+        'sender_id':            request.user.id,
+        'sender_username':      request.user.username,
+        'sender_display_name':  getattr(request.user, 'display_name', request.user.username),
+        'sender_avatar':        avatar_url,
+        'created_at':           msg.created_at.isoformat(),
+        'duration':             msg.duration or 0,
+    })
+ 
+ 
+@login_required
+def send_dm_voice_note(request, workspace_id):
+    """
+    POST /api/workspace/<workspace_id>/send-dm-voice-note/
+    Multipart form: audio (file), receiver_id (int), duration (int, seconds)
+    Returns: { success, voice_url, message_id, sender_*, created_at, duration }
+    """
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST required'}, status=405)
+ 
+    if not WorkspaceMembership.objects.filter(user=request.user, workspace_id=workspace_id).exists():
+        return JsonResponse({'error': 'not a member'}, status=403)
+ 
+    audio_file  = request.FILES.get('audio')
+    receiver_id = request.POST.get('receiver_id')
+    duration    = request.POST.get('duration', 0)
+ 
+    if not audio_file:
+        return JsonResponse({'error': 'No audio file provided'}, status=400)
+    if not receiver_id:
+        return JsonResponse({'error': 'receiver_id required'}, status=400)
+ 
+    try:
+        receiver_id = int(receiver_id)
+        duration    = int(float(duration))
+    except (ValueError, TypeError, OverflowError):
+        return JsonResponse({'error': 'Invalid receiver_id or duration'}, status=400)
+ 
+    workspace = get_object_or_404(Workspace, id=workspace_id)
+    receiver  = get_object_or_404(CustomUser, id=receiver_id)
+    
+    # Upload voice note to Supabase (with local fallback)
+    voice_uuid = _uuid.uuid4()
+    voice_path = build_storage_path('voice_notes/dm', f'voice_{voice_uuid}.webm')
+    upload_file(voice_path, audio_file, 'audio/webm')
+ 
+    dm = DirectMessage.objects.create(
+        workspace=workspace,
+        sender=request.user,
+        receiver=receiver,
+        message='',
+        voice_note=voice_path,      # store the path, not the file
+        duration=duration,
+    )
+ 
+    avatar_url = '/static/Areeba.jpeg'
+    if request.user.profile_picture:
+        avatar_url = request.user.profile_picture_url
+    
+    # Get signed URL from Supabase or local
+    voice_url = create_signed_url(voice_path)
+    if not voice_url:
+        voice_url = request.build_absolute_uri(f'/media/{voice_path}')
+ 
+    return JsonResponse({
+        'success':              True,
+        'voice_url':            voice_url,
+        'message_id':           str(_uuid.uuid4()),   # unique id for dedup
+        'db_id':                dm.id,
+        'sender_id':            request.user.id,
+        'sender_username':      request.user.username,
+        'sender_display_name':  getattr(request.user, 'display_name', request.user.username),
+        'sender_avatar':        avatar_url,
+        'created_at':           dm.created_at.isoformat(),
+        'duration':             dm.duration or 0,
+    })
+
+#  ----------------------- CHAT CALLS -----------------------------
+# ── Daily.co helpers ──────────────────────────────────────────────
+ 
+def _daily_headers():
+    return {
+        'Authorization': f'Bearer {settings.DAILY_API_KEY}',
+        'Content-Type': 'application/json',
+    }
+ 
+def _create_daily_room(workspace_id, call_type='video'):
+    """
+    Create a Daily.co room.
+    Using 'public' privacy so participants can join with a meeting token OR
+    directly via URL — avoids the private-room token-exchange CORS issue
+    that causes join() to reject in the browser.
+    The room is still protected by a short expiry (2 hours).
+    Returns (room_name, room_url).
+    """
+    short_id  = uuid.uuid4().hex[:8]
+    room_name = f'kh-{workspace_id}-{short_id}'   # e.g. kh-2-a3f1b2c4
+ 
+    exp_ts = int((timezone.now() + timedelta(hours=2)).timestamp())
+ 
+    payload = {
+        'name': room_name,
+        'privacy': 'public',          # ← changed from 'private'
+        'properties': {
+            'exp':                exp_ts,
+            'enable_screenshare': True,
+            'start_video_off':    call_type == 'voice',
+            'start_audio_off':    False,
+            # Do NOT include max_participants — not available on free plan
+        }
+    }
+ 
+    resp = http_requests.post(
+        f'{settings.DAILY_API_URL}/rooms',
+        json=payload,
+        headers=_daily_headers(),
+        timeout=10,
+    )
+ 
+    if not resp.ok:
+        try:    err_body = resp.json()
+        except: err_body = resp.text
+        raise Exception(f'Daily API {resp.status_code}: {err_body}')
+ 
+    data = resp.json()
+    return data['name'], data['url']
+ 
+def _create_daily_token(room_name, display_name, is_owner=False):
+    """
+    Create a meeting token so participants appear with their display name
+    and the owner gets meeting controls.
+    Still useful even for public rooms.
+    """
+    exp_ts = int((timezone.now() + timedelta(hours=2)).timestamp())
+ 
+    payload = {
+        'properties': {
+            'room_name':          room_name,
+            'user_name':          display_name,
+            'exp':                exp_ts,
+            'is_owner':           is_owner,
+            'enable_screenshare': True,
+            'start_video_off':    False,
+            'start_audio_off':    False,
+        }
+    }
+ 
+    resp = http_requests.post(
+        f'{settings.DAILY_API_URL}/meeting-tokens',
+        json=payload,
+        headers=_daily_headers(),
+        timeout=10,
+    )
+ 
+    if not resp.ok:
+        try:    err_body = resp.json()
+        except: err_body = resp.text
+        raise Exception(f'Daily token API {resp.status_code}: {err_body}')
+ 
+    return resp.json()['token']
+ 
+ 
+def _delete_daily_room(room_name):
+    """Delete a Daily.co room (best-effort, ignore errors)."""
+    try:
+        http_requests.delete(
+            f'{settings.DAILY_API_URL}/rooms/{room_name}',
+            headers=_daily_headers(),
+            timeout=5,
+        )
+    except Exception:
+        pass
+ 
+ 
+# ── Call API views ────────────────────────────────────────────────
+ 
+@login_required
+def active_call(request, workspace_id):
+    """
+    GET /api/workspace/<workspace_id>/call/active/
+    Returns the currently active call for this workspace, or {active: false}.
+    Used by clients on page-load to show the persistent call banner if a call
+    is already in progress when they arrive.
+    """
+    if not WorkspaceMembership.objects.filter(
+        user=request.user, workspace_id=workspace_id
+    ).exists():
+        return JsonResponse({'error': 'not a member'}, status=403)
+ 
+    call = WorkspaceCall.objects.filter(
+        workspace_id=workspace_id, is_active=True
+    ).select_related('initiated_by').first()
+ 
+    if not call:
+        return JsonResponse({'active': False})
+ 
+    display_name = (
+        getattr(call.initiated_by, 'display_name', None)
+        or (call.initiated_by.username if call.initiated_by else 'Someone')
+    )
+ 
+    return JsonResponse({
+        'active':      True,
+        'call_id':     call.id,
+        'call_type':   call.call_type,
+        'caller_id':   call.initiated_by_id,
+        'caller_name': display_name,
+        'room_url':    call.room_url,
+    })
+   
+@login_required
+def start_call(request, workspace_id):
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'POST required'}, status=405)
+ 
+    membership = WorkspaceMembership.objects.filter(
+        user=request.user, workspace_id=workspace_id
+    ).first()
+    if not membership:
+        return JsonResponse({'success': False, 'error': 'Not a member'}, status=403)
+ 
+    try:
+        body = json.loads(request.body or '{}')
+    except (json.JSONDecodeError, ValueError):
+        body = {}
+ 
+    call_type = body.get('call_type', 'video')
+    if call_type not in ('voice', 'video'):
+        call_type = 'video'
+ 
+    # Deactivate existing active calls for this workspace
+    WorkspaceCall.objects.filter(
+        workspace_id=workspace_id, is_active=True
+    ).update(is_active=False, ended_at=timezone.now())
+ 
+    # Create Daily.co room
+    try:
+        room_name, room_url = _create_daily_room(workspace_id, call_type)
+    except Exception as exc:
+        logger.error(f'start_call room creation failed: {exc}')
+        return JsonResponse({'success': False, 'error': str(exc)}, status=500)
+ 
+    # Save to DB
+    call = WorkspaceCall.objects.create(
+        workspace_id=workspace_id,
+        initiated_by=request.user,
+        room_name=room_name,
+        room_url=room_url,
+        call_type=call_type,
+        is_active=True,
+    )
+ 
+    # Create caller token (owner)
+    display_name = getattr(request.user, 'display_name', None) or request.user.username
+    try:
+        token = _create_daily_token(room_name, display_name, is_owner=True)
+    except Exception as exc:
+        logger.error(f'start_call token creation failed: {exc}')
+        call.delete()
+        _delete_daily_room(room_name)
+        return JsonResponse({'success': False, 'error': str(exc)}, status=500)
+ 
+    # Broadcast incoming-call signal to workspace via WebSocket
+    try:
+        from channels.layers import get_channel_layer
+        from asgiref.sync import async_to_sync
+        channel_layer = get_channel_layer()
+        async_to_sync(channel_layer.group_send)(
+            f'workspace_{workspace_id}',
+            {
+                'type':         'call_signal',
+                'signal':       'incoming_call',
+                'call_id':      call.id,
+                'call_type':    call_type,
+                'caller_id':    request.user.id,
+                'caller_name':  display_name,
+                'workspace_id': workspace_id,
+            }
+        )
+    except Exception as exc:
+        logger.warning(f'start_call WS broadcast failed (non-fatal): {exc}')
+ 
+    return JsonResponse({
+        'success':   True,
+        'call_id':   call.id,
+        'room_url':  room_url,
+        'room_name': room_name,
+        'token':     token,
+        'call_type': call_type,
+    })
+ 
+ 
+@login_required
+def join_call(request, workspace_id, call_id):
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'POST required'}, status=405)
+ 
+    membership = WorkspaceMembership.objects.filter(
+        user=request.user, workspace_id=workspace_id
+    ).first()
+    if not membership:
+        return JsonResponse({'success': False, 'error': 'Not a member'}, status=403)
+ 
+    call = WorkspaceCall.objects.filter(
+        id=call_id, workspace_id=workspace_id, is_active=True
+    ).first()
+    if not call:
+        return JsonResponse(
+            {'success': False, 'error': 'Call not found or already ended'}, status=404
+        )
+ 
+    display_name = getattr(request.user, 'display_name', None) or request.user.username
+    try:
+        token = _create_daily_token(call.room_name, display_name, is_owner=False)
+    except Exception as exc:
+        logger.error(f'join_call token creation failed: {exc}')
+        return JsonResponse({'success': False, 'error': str(exc)}, status=500)
+ 
+    return JsonResponse({
+        'success':   True,
+        'call_id':   call.id,
+        'room_url':  call.room_url,
+        'room_name': call.room_name,
+        'token':     token,
+        'call_type': call.call_type,
+    })
+ 
+ 
+@login_required
+def end_call(request, workspace_id, call_id):
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'POST required'}, status=405)
+ 
+    membership = WorkspaceMembership.objects.filter(
+        user=request.user, workspace_id=workspace_id
+    ).first()
+    if not membership:
+        return JsonResponse({'success': False, 'error': 'Not a member'}, status=403)
+ 
+    call = WorkspaceCall.objects.filter(
+        id=call_id, workspace_id=workspace_id, is_active=True
+    ).first()
+    if not call:
+        return JsonResponse({'success': False, 'error': 'Call not found'}, status=404)
+ 
+    call.is_active = False
+    call.ended_at  = timezone.now()
+    call.save(update_fields=['is_active', 'ended_at'])
+ 
+    _delete_daily_room(call.room_name)
+ 
+    try:
+        from channels.layers import get_channel_layer
+        from asgiref.sync import async_to_sync
+        channel_layer = get_channel_layer()
+        async_to_sync(channel_layer.group_send)(
+            f'workspace_{workspace_id}',
+            {
+                'type':         'call_signal',
+                'signal':       'call_ended',
+                'call_id':      call_id,
+                'caller_id':    None,
+                'workspace_id': workspace_id,
+            }
+        )
+    except Exception as exc:
+        logger.warning(f'end_call WS broadcast failed (non-fatal): {exc}')
+ 
+    return JsonResponse({'success': True})
+ 
+ 
+@login_required
+def decline_call(request, workspace_id, call_id):
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'POST required'}, status=405)
+    return JsonResponse({'success': True})
+
+# -----------------------Chat page Settings Logic---------------------------------
+
+
+#  ----------------------- Danger Zone Tab Logic ------------------------------------------
 # Delete workspace (admin only)
 @login_required
 def delete_workspace(request, workspace_id):
@@ -568,6 +1705,35 @@ def delete_workspace(request, workspace_id):
 
     return redirect("chatui", workspace_id=workspace.id)
 
+
+@login_required
+def delete_workspace_api(request, workspace_id):
+    """Delete workspace (AJAX version)"""
+    if request.method != "POST":
+        return JsonResponse({"error": "Method not allowed"}, status=405)
+
+    try:
+        workspace = get_object_or_404(Workspace, id=workspace_id)
+        
+        # Only workspace admin can delete
+        if workspace.admin != request.user:
+            return JsonResponse({"error": "Only the workspace admin can delete this workspace."}, status=403)
+        
+        data = json.loads(request.body)
+        confirm_title = data.get("title", "").strip()
+        
+        if confirm_title != workspace.title:
+            return JsonResponse({"error": "Workspace title does not match. Cannot delete."}, status=400)
+        
+        workspace_name = workspace.title
+        workspace.delete()
+        return JsonResponse({"success": True, "message": f"Workspace '{workspace_name}' deleted successfully!"})
+    
+    except Exception as e:
+        print(f"Error in delete_workspace_api: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return JsonResponse({"error": f"Server error: {str(e)}"}, status=500)
 
 
 
@@ -667,123 +1833,7 @@ def leave_workspace(request, workspace_id):
         traceback.print_exc()
         return JsonResponse({"error": f"Server error: {str(e)}"}, status=500)
 
-
-
-# ------------------------------------- API's Logic-------------------------------------------
-
-@login_required
-def messages_api(request, workspace_id):
-    """Return recent messages for a workspace as JSON.
-
-    URL: /api/workspace/<workspace_id>/messages/?limit=100
-    """
-    # membership check
-    if not WorkspaceMembership.objects.filter(user=request.user, workspace_id=workspace_id).exists():
-        return JsonResponse({'error': 'not a member'}, status=403)
-
-    # Clean up old messages if retention policy is set
-    workspace = get_object_or_404(Workspace, id=workspace_id)
-    if workspace.message_retention_days:
-        from datetime import timedelta
-        from django.utils import timezone
-        cutoff_date = timezone.now() - timedelta(days=workspace.message_retention_days)
-        Message.objects.filter(workspace=workspace, created_at__lt=cutoff_date).delete()
-
-    # allow caller to limit number of messages (defaults to 100)
-    try:
-        limit = int(request.GET.get('limit', 100))
-    except ValueError:
-        limit = 100
-
-    msgs = (
-        Message.objects.filter(workspace_id=workspace_id)
-        .order_by('created_at')[:limit]
-    )
-
-    # serialize in chronological order (oldest first)
-    data = []
-    for m in msgs:
-        data.append({
-            'id': m.id,
-            'message_id': str(m.message_uuid) if m.message_uuid else None,
-            'message': m.message,
-            'sender_id': m.sender.id if m.sender else None,
-            'sender_username': m.sender.username if m.sender else None,
-            'sender_display_name': getattr(m.sender, 'display_name', None) if m.sender else None,
-            'sender_avatar': m.sender.profile_picture_url if (m.sender and m.sender.profile_picture) else '/static/Areeba.jpeg',
-            'created_at': m.created_at.isoformat(),
-        })
-
-    return JsonResponse(data, safe=False)
-
-
-# simple profile data endpoint used for live updates
-@login_required
-def profile_api(request):
-    user = request.user
-    data = {
-        "display_name": user.display_name,
-        "bio": user.bio,
-        "status": user.status,
-        "profile_picture": user.profile_picture_url or "",
-    }
-    return JsonResponse(data)
-
-
-
-@login_required
-def direct_messages_api(request, workspace_id, user_id):
-
-    if not WorkspaceMembership.objects.filter(
-        user=request.user,
-        workspace_id=workspace_id
-    ).exists():
-        return JsonResponse({"error": "not allowed"}, status=403)
-
-    messages = DirectMessage.objects.filter(
-        workspace_id=workspace_id
-    ).filter(
-        Q(sender=request.user, receiver_id=user_id) |
-        Q(sender_id=user_id, receiver=request.user)
-    ).order_by("created_at")
-
-    data = []
-
-    for m in messages:
-        data.append({
-            "id": m.id,
-            "message": m.message,
-            "sender_id": m.sender_id,
-            "sender": m.sender.username,
-            "created_at": m.created_at.isoformat()
-        })
-
-    return JsonResponse(data, safe=False)
-
-@login_required
-def send_dm(request, workspace_id):
-
-    data = json.loads(request.body)
-
-    receiver_id = data.get("receiver_id")
-    message = data.get("message")
-
-    if not WorkspaceMembership.objects.filter(
-        user=request.user,
-        workspace_id=workspace_id
-    ).exists():
-        return JsonResponse({"error":"not allowed"}, status=403)
-
-    dm = DirectMessage.objects.create(
-        workspace_id=workspace_id,
-        sender=request.user,
-        receiver_id=receiver_id,
-        message=message
-    )
-
-    return JsonResponse({"success":True})
-
-
+#  ------------------------ Users Tab-----------------------------------------------
 @login_required
 def members_api(request, workspace_id):
     """Get all members of a workspace with their roles"""
@@ -818,34 +1868,243 @@ def members_api(request, workspace_id):
     return JsonResponse(data)
 
 
+#  Remove a user from workspace (admin only)
 @login_required
-def delete_workspace_api(request, workspace_id):
-    """Delete workspace (AJAX version)"""
+def remove_member(request, workspace_id):
+    workspace = get_object_or_404(Workspace, id=workspace_id)
+
+    # Only admins can remove members
+    membership = WorkspaceMembership.objects.filter(
+        user=request.user, workspace_id=workspace_id
+    ).first()
+
+    if not membership or membership.role != "admin":
+        error_msg = "Only admins can remove members."
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse({'error': error_msg, 'is_admin': False}, status=403)
+        messages.error(request, error_msg)
+        return redirect("chatui", workspace_id=workspace.id)
+
+    if request.method == "POST":
+        username = request.POST.get("username", "").strip()
+
+        if not username:
+            error_msg = "Username is required."
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return JsonResponse({'error': error_msg}, status=400)
+            messages.error(request, error_msg)
+            return redirect("chatui", workspace_id=workspace.id)
+
+        try:
+            user_to_remove = CustomUser.objects.get(username=username)
+        except CustomUser.DoesNotExist:
+            error_msg = "User not found."
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return JsonResponse({'error': error_msg}, status=404)
+            messages.error(request, error_msg)
+            return redirect("chatui", workspace_id=workspace.id)
+
+        # Prevent removing admin (yourself or other admins)
+        target_membership = WorkspaceMembership.objects.filter(
+            workspace=workspace, user=user_to_remove
+        ).first()
+
+        if not target_membership:
+            error_msg = f"{username} is not in this workspace."
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return JsonResponse({'error': error_msg}, status=404)
+            messages.error(request, error_msg)
+            return redirect("chatui", workspace_id=workspace.id)
+
+        if target_membership.role == "admin":
+            error_msg = "Admins cannot be removed from workspace."
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return JsonResponse({'error': error_msg}, status=400)
+            messages.error(request, error_msg)
+            return redirect("chatui", workspace_id=workspace.id)
+
+        # Successfully remove the member
+        target_membership.delete()
+        
+        # Clean up all invitation records for this user in this workspace
+        # This allows them to be re-added later without conflicts
+        Invitation.objects.filter(
+            workspace=workspace,
+            recipient_user=user_to_remove
+        ).delete()
+        
+        success_msg = f"{username} has been removed from {workspace.title}."
+        
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse({'success': True, 'message': success_msg})
+        
+        messages.success(request, success_msg)
+        return redirect("chatui", workspace_id=workspace.id)
+
+    return redirect("chatui", workspace_id=workspace.id)
+
+
+#  ----------------------------- Settings Privacy Tab ----------------------------
+@login_required
+def get_privacy_settings(request, workspace_id):
+    """Get privacy settings for a workspace"""
+    workspace = get_object_or_404(Workspace, id=workspace_id)
+    
+    membership = WorkspaceMembership.objects.filter(
+        user=request.user, workspace_id=workspace_id
+    ).first()
+    
+    if not membership:
+        return JsonResponse({"error": "Not a member"}, status=403)
+    
+    data = {
+        "visibility": workspace.visibility,
+        "invites_restricted_to_admins": workspace.invites_restricted_to_admins,
+        "message_retention_days": workspace.message_retention_days,
+        "is_admin": membership.role == "admin"
+    }
+    return JsonResponse(data)
+
+
+@login_required
+def update_privacy_settings(request, workspace_id):
+    """Update privacy settings for a workspace (admin only)"""
     if request.method != "POST":
         return JsonResponse({"error": "Method not allowed"}, status=405)
-
+    
     try:
         workspace = get_object_or_404(Workspace, id=workspace_id)
         
-        # Only workspace admin can delete
-        if workspace.admin != request.user:
-            return JsonResponse({"error": "Only the workspace admin can delete this workspace."}, status=403)
+        membership = WorkspaceMembership.objects.filter(
+            user=request.user, workspace_id=workspace_id
+        ).first()
+        
+        if not membership:
+            return JsonResponse({"error": "Not a member"}, status=403)
+        
+        if membership.role != "admin":
+            return JsonResponse({"error": "Only admins can update privacy settings"}, status=403)
         
         data = json.loads(request.body)
-        confirm_title = data.get("title", "").strip()
         
-        if confirm_title != workspace.title:
-            return JsonResponse({"error": "Workspace title does not match. Cannot delete."}, status=400)
+        # Update visibility
+        if "visibility" in data:
+            if data["visibility"] not in ["public", "private"]:
+                return JsonResponse({"error": "Invalid visibility option"}, status=400)
+            workspace.visibility = data["visibility"]
         
-        workspace_name = workspace.title
-        workspace.delete()
-        return JsonResponse({"success": True, "message": f"Workspace '{workspace_name}' deleted successfully!"})
+        # Update invite restriction
+        if "invites_restricted_to_admins" in data:
+            workspace.invites_restricted_to_admins = data["invites_restricted_to_admins"]
+        
+        # Update message retention
+        if "message_retention_days" in data:
+            retention = data["message_retention_days"]
+            if retention is not None:
+                retention = int(retention)
+                if retention not in [7, 30, 90, None]:
+                    return JsonResponse({"error": "Invalid retention period"}, status=400)
+            workspace.message_retention_days = retention
+        
+        workspace.save()
+        
+        return JsonResponse({
+            "success": True,
+            "message": "Privacy settings updated successfully",
+            "settings": {
+                "visibility": workspace.visibility,
+                "invites_restricted_to_admins": workspace.invites_restricted_to_admins,
+                "message_retention_days": workspace.message_retention_days
+            }
+        })
     
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
     except Exception as e:
-        print(f"Error in delete_workspace_api: {str(e)}")
+        print(f"Error updating privacy settings: {str(e)}")
         import traceback
         traceback.print_exc()
         return JsonResponse({"error": f"Server error: {str(e)}"}, status=500)
+
+
+@login_required
+def cleanup_old_messages(request, workspace_id):
+    """Delete messages older than retention period (called periodically or on demand)"""
+    try:
+        workspace = get_object_or_404(Workspace, id=workspace_id)
+        
+        membership = WorkspaceMembership.objects.filter(
+            user=request.user, workspace_id=workspace_id
+        ).first()
+        
+        if not membership:
+            return JsonResponse({"error": "Not a member"}, status=403)
+        
+        if membership.role != "admin":
+            return JsonResponse({"error": "Only admins can trigger cleanup"}, status=403)
+        
+        if not workspace.message_retention_days:
+            return JsonResponse({"error": "No retention policy set"}, status=400)
+        
+        from datetime import timedelta
+        from django.utils import timezone
+        
+        cutoff_date = timezone.now() - timedelta(days=workspace.message_retention_days)
+        deleted_count, _ = Message.objects.filter(
+            workspace=workspace,
+            created_at__lt=cutoff_date
+        ).delete()
+        
+        return JsonResponse({
+            "success": True,
+            "message": f"Deleted {deleted_count} old messages",
+            "deleted_count": deleted_count
+        })
+    
+    except Exception as e:
+        print(f"Error cleaning up messages: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return JsonResponse({"error": f"Server error: {str(e)}"}, status=500)
+
+
+#  --------------------------- Settings Invitation Tab---------------------
+@login_required
+def add_member_manual(request, workspace_id):
+    workspace = get_object_or_404(Workspace, id=workspace_id)
+
+    # Only admins can add members
+    if not is_workspace_admin(request.user, workspace):
+        messages.error(request, "Only admins can add members.")
+        return redirect("chatui", workspace_id=workspace.id)
+
+    if request.method == "POST":
+        identifier = request.POST.get("identifier")  # username or email
+        role = request.POST.get("role", "member")   # default to member
+
+        try:
+            user = CustomUser.objects.get(
+                models.Q(username=identifier) | models.Q(email=identifier)
+            )
+        except CustomUser.DoesNotExist:
+            messages.error(request, "User not found. Ask them to signup first.")
+            return redirect("chatui", workspace_id=workspace.id)
+
+        #  Check if user is already part of 50 or more workspaces
+        existing_memberships = WorkspaceMembership.objects.filter(user=user).count()
+        if existing_memberships >= 50:
+            messages.error(request, f"{user.username} is already part of 50 workspaces and cannot be added.")
+            return redirect("chatui", workspace_id=workspace.id)
+
+        # Add the user if they are eligible
+        WorkspaceMembership.objects.get_or_create(
+            workspace=workspace, user=user, defaults={"role": role}
+        )
+        messages.success(request, f"{user.username} added to workspace as {role}!")
+        return redirect("chatui", workspace_id=workspace.id)
+
+    # Default redirect (in case of GET request or fallback)
+    return redirect("chatui", workspace_id=workspace.id)
 
 
 @login_required
@@ -970,7 +2229,7 @@ def send_invitation(request, workspace_id):
         traceback.print_exc()
         return JsonResponse({"error": f"Server error: {str(e)}"}, status=500)
 
-# Workspace - settings tab logic ---------------------------------------
+
 @login_required
 def get_sent_invitations(request, workspace_id):
     """Get all invitations sent to this workspace"""
@@ -1003,134 +2262,7 @@ def get_sent_invitations(request, workspace_id):
     return JsonResponse(data)
 
 
-@login_required
-def get_privacy_settings(request, workspace_id):
-    """Get privacy settings for a workspace"""
-    workspace = get_object_or_404(Workspace, id=workspace_id)
-    
-    membership = WorkspaceMembership.objects.filter(
-        user=request.user, workspace_id=workspace_id
-    ).first()
-    
-    if not membership:
-        return JsonResponse({"error": "Not a member"}, status=403)
-    
-    data = {
-        "visibility": workspace.visibility,
-        "invites_restricted_to_admins": workspace.invites_restricted_to_admins,
-        "message_retention_days": workspace.message_retention_days,
-        "is_admin": membership.role == "admin"
-    }
-    return JsonResponse(data)
-
-
-@login_required
-def update_privacy_settings(request, workspace_id):
-    """Update privacy settings for a workspace (admin only)"""
-    if request.method != "POST":
-        return JsonResponse({"error": "Method not allowed"}, status=405)
-    
-    try:
-        workspace = get_object_or_404(Workspace, id=workspace_id)
-        
-        membership = WorkspaceMembership.objects.filter(
-            user=request.user, workspace_id=workspace_id
-        ).first()
-        
-        if not membership:
-            return JsonResponse({"error": "Not a member"}, status=403)
-        
-        if membership.role != "admin":
-            return JsonResponse({"error": "Only admins can update privacy settings"}, status=403)
-        
-        data = json.loads(request.body)
-        
-        # Update visibility
-        if "visibility" in data:
-            if data["visibility"] not in ["public", "private"]:
-                return JsonResponse({"error": "Invalid visibility option"}, status=400)
-            workspace.visibility = data["visibility"]
-        
-        # Update invite restriction
-        if "invites_restricted_to_admins" in data:
-            workspace.invites_restricted_to_admins = data["invites_restricted_to_admins"]
-        
-        # Update message retention
-        if "message_retention_days" in data:
-            retention = data["message_retention_days"]
-            if retention is not None:
-                retention = int(retention)
-                if retention not in [7, 30, 90, None]:
-                    return JsonResponse({"error": "Invalid retention period"}, status=400)
-            workspace.message_retention_days = retention
-        
-        workspace.save()
-        
-        return JsonResponse({
-            "success": True,
-            "message": "Privacy settings updated successfully",
-            "settings": {
-                "visibility": workspace.visibility,
-                "invites_restricted_to_admins": workspace.invites_restricted_to_admins,
-                "message_retention_days": workspace.message_retention_days
-            }
-        })
-    
-    except json.JSONDecodeError:
-        return JsonResponse({"error": "Invalid JSON"}, status=400)
-    except Exception as e:
-        print(f"Error updating privacy settings: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        return JsonResponse({"error": f"Server error: {str(e)}"}, status=500)
-
-
-@login_required
-def cleanup_old_messages(request, workspace_id):
-    """Delete messages older than retention period (called periodically or on demand)"""
-    try:
-        workspace = get_object_or_404(Workspace, id=workspace_id)
-        
-        membership = WorkspaceMembership.objects.filter(
-            user=request.user, workspace_id=workspace_id
-        ).first()
-        
-        if not membership:
-            return JsonResponse({"error": "Not a member"}, status=403)
-        
-        if membership.role != "admin":
-            return JsonResponse({"error": "Only admins can trigger cleanup"}, status=403)
-        
-        if not workspace.message_retention_days:
-            return JsonResponse({"error": "No retention policy set"}, status=400)
-        
-        from datetime import timedelta
-        from django.utils import timezone
-        
-        cutoff_date = timezone.now() - timedelta(days=workspace.message_retention_days)
-        deleted_count, _ = Message.objects.filter(
-            workspace=workspace,
-            created_at__lt=cutoff_date
-        ).delete()
-        
-        return JsonResponse({
-            "success": True,
-            "message": f"Deleted {deleted_count} old messages",
-            "deleted_count": deleted_count
-        })
-    
-    except Exception as e:
-        print(f"Error cleaning up messages: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        return JsonResponse({"error": f"Server error: {str(e)}"}, status=500)
-
-
-
-# __________________________INvite Links____________________________________
-
-from django.http import JsonResponse
-from .models import WorkspaceInvite
+# __________________________Invite Links____________________________________
 
 @login_required
 def get_invite_links(request, workspace_id):
@@ -1262,7 +2394,6 @@ def revoke_invite(request, invite_id):
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=500)
 
-from django.shortcuts import get_object_or_404, redirect
 
 def join_workspace_invite(request, token):
     try:
@@ -2113,4 +3244,199 @@ def task_comment_create(request, workspace_id, task_id):
         reference_id=task.id,
     )
     return JsonResponse({"success": True, "comment": comment_payload}, status=201)
+ 
+
+#  ------------------------ AI Page Logic --------------------------------
+@login_required
+def ai_page(request, workspace_id):
+    membership = WorkspaceMembership.objects.filter(
+        user=request.user, workspace_id=workspace_id
+    ).first()
+
+    if not membership:
+        messages.error(request, "You are not part of this workspace.")
+        return redirect("workspace")
+
+    workspace = membership.workspace
+
+    members = WorkspaceMembership.objects.filter(
+        workspace=workspace
+    ).select_related("user")
+
+    # exclude yourself from DM list
+    dm_members = members.exclude(user=request.user)
+
+    notification_counts = _get_notification_counts(workspace, request.user)
+
+    return render(request, "ai.html", {
+        "workspace": workspace,
+        "members": members,
+        "dm_members": dm_members,
+        "notification_counts": notification_counts,
+        "notification_counts_json": json.dumps(notification_counts),
+        "is_ai_page": True,
+        "base_template": "base_layout.html",
+    })
+
+# Minimal AI chat API used by frontend `/api/ai-chat/` (keeps existing functionality)
+
+@login_required
+@require_POST
+def ai_chat(request, workspace_id):
+    """
+    POST /api/workspace/<workspace_id>/ai-chat/
+    Body: { "message": "..." }
+    Returns: { "response": "...", "history": [ {role, content, created_at}, ... ] }
+ 
+    Saves both the user turn and the assistant reply to AIMessage,
+    then returns the full conversation history for this (workspace, user).
+    """
+    # ── Membership check ──────────────────────────────────────────────────────
+    if not WorkspaceMembership.objects.filter(
+        user=request.user, workspace_id=workspace_id
+    ).exists():
+        return JsonResponse({'error': 'not a member'}, status=403)
+ 
+    # ── Parse body ────────────────────────────────────────────────────────────
+    try:
+        payload = json.loads(request.body.decode('utf-8') or '{}')
+    except ValueError:
+        return JsonResponse({'error': 'Invalid JSON.'}, status=400)
+ 
+    user_message = (payload.get('message') or '').strip()
+    if not user_message:
+        return JsonResponse({'error': 'Message is required.'}, status=400)
+ 
+    workspace = get_object_or_404(Workspace, id=workspace_id)
+ 
+    # ── Save the user's message ───────────────────────────────────────────────
+    AIMessage.objects.create(
+        workspace=workspace,
+        user=request.user,
+        role='user',
+        content=user_message,
+    )
+ 
+    # ── Get AI response ───────────────────────────────────────────────────────
+    response_text = get_response(user_message)
+ 
+    # ── Save the assistant's reply ────────────────────────────────────────────
+    AIMessage.objects.create(
+        workspace=workspace,
+        user=request.user,
+        role='assistant',
+        content=response_text,
+    )
+ 
+    return JsonResponse({'response': response_text})
+ 
+
+@login_required
+@require_POST
+def ai_chat_legacy(request):
+    """Legacy endpoint for requests without a workspace ID in the URL."""
+    try:
+        payload = json.loads(request.body.decode('utf-8') or '{}')
+    except ValueError:
+        return JsonResponse({'error': 'Invalid JSON.'}, status=400)
+
+    workspace_id = payload.get('workspace_id')
+    if workspace_id:
+        return ai_chat(request, workspace_id)
+
+    memberships = WorkspaceMembership.objects.filter(user=request.user)
+    if memberships.count() == 1:
+        return ai_chat(request, memberships.first().workspace_id)
+
+    referer = request.META.get('HTTP_REFERER', '')
+    match = re.search(r'/workspace/(\d+)/|/chatui/(\d+)/|/taskboard/(\d+)/|/ai-chat/(\d+)/', referer)
+    if match:
+        workspace_id = next((group for group in match.groups() if group), None)
+        if workspace_id:
+            return ai_chat(request, int(workspace_id))
+
+    return JsonResponse({'error': 'Workspace ID required for legacy AI endpoint.'}, status=400)
+
+
+# @login_required
+# @require_POST
+# def ai_chat(request):
+#     try:
+#         payload = json.loads(request.body.decode("utf-8") or "{}")
+#     except ValueError:
+#         return JsonResponse({"error": "Invalid JSON."}, status=400)
+
+#     message = (payload.get("message") or "").strip()
+#     if not message:
+#         return JsonResponse({"error": "Message is required."}, status=400)
+
+#     response_text = get_response(message)
+#     return JsonResponse({"response": response_text})
+
+
+def ai(request, workspace_id):
+    # 1. Verify the workspace exists
+    workspace = get_object_or_404(Workspace, id=workspace_id)
+    
+    # 2. Check if your AI service is working/available
+    ai_is_working = True  # Replace with your actual AI API check logic
+    
+    if not ai_is_working:
+        # Redirect user back to the taskboard page safely
+        return redirect('taskboard', workspace_id=workspace_id)
+        
+    # 3. If it works, load the AI page with workspace context
+    context = {
+        'workspace': workspace,
+    }
+    return render(request, 'ai.html', context)
+
+@login_required
+def ai_history(request, workspace_id):
+    """
+    GET /api/workspace/<workspace_id>/ai-history/
+    Returns the full AI conversation history for the current user
+    in this workspace, ordered oldest-first.
+    Used on page load to restore the chat panel.
+    """
+    if not WorkspaceMembership.objects.filter(
+        user=request.user, workspace_id=workspace_id
+    ).exists():
+        return JsonResponse({'error': 'not a member'}, status=403)
+ 
+    messages_qs = AIMessage.objects.filter(
+        workspace_id=workspace_id,
+        user=request.user,
+    ).order_by('created_at')
+ 
+    history = [
+        {
+            'role':       m.role,
+            'content':    m.content,
+            'created_at': m.created_at.isoformat(),
+        }
+        for m in messages_qs
+    ]
+ 
+    return JsonResponse({'history': history})
+ 
+ 
+@login_required
+@require_POST
+def ai_clear_history(request, workspace_id):
+    """
+    POST /api/workspace/<workspace_id>/ai-clear-history/
+    Deletes all AI messages for the current user in this workspace.
+    """
+    if not WorkspaceMembership.objects.filter(
+        user=request.user, workspace_id=workspace_id
+    ).exists():
+        return JsonResponse({'error': 'not a member'}, status=403)
+ 
+    deleted_count, _ = AIMessage.objects.filter(
+        workspace_id=workspace_id,
+        user=request.user,
+    ).delete()
+ 
+    return JsonResponse({'success': True, 'deleted': deleted_count})
  

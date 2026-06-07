@@ -15,10 +15,10 @@
   --text-400:     #a3a3a3;
   --text-500:     #737373;
   --muted:        #888;
-  --accent:       #E8B4A8;
-  --accent-light: #F5D5CC;
-  --accent-dim:   rgba(232,180,168,0.10);
-  --accent-hover: #D4A89E;
+  --accent:       #f4856a;
+  --accent-light: #e8b4a8;
+  --accent-dim:   rgba(244,133,106,0.10);
+  --accent-hover: #f9a08b;
   --green:        #4ade80;
   --green-dim:    rgba(74,222,128,0.12);
   --red:          #f87171;
@@ -36,7 +36,7 @@ html, body {
   height: 100%;
   background: var(--bg);
   color: var(--text);
-  font-family: var(--font-family);
+  font-family: 'DM Sans', sans-serif;
   overflow: hidden;
 }
 
@@ -79,7 +79,7 @@ html, body {
 
 .board-title-wrap { display: flex; flex-direction: column; }
 .board-title {
-  font-family: var(--font-family);
+  font-family: 'Syne', sans-serif;
   font-size: 1.05rem;
   font-weight: 800;
   letter-spacing: -0.02em;
@@ -121,7 +121,7 @@ html, body {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   color: var(--text);
-  font-family: var(--font-family);
+  font-family: 'DM Sans', sans-serif;
   font-size: .8rem;
   padding: 7px 10px 7px 30px;
   outline: none;
@@ -149,7 +149,7 @@ html, body {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   color: var(--text-400);
-  font-family: var(--font-family);
+  font-family: 'DM Sans', sans-serif;
   font-size: .8rem;
   font-weight: 500;
   cursor: pointer;
@@ -225,7 +225,7 @@ html, body {
   cursor: pointer;
   padding: 2px 4px;
   border-radius: 5px;
-  font-family: var(--font-family);
+  font-family: 'DM Sans', sans-serif;
   transition: background .15s;
 }
 .filter-clear-btn:hover { background: var(--accent-dim); }
@@ -258,7 +258,7 @@ html, body {
   background: none;
   border: none;
   color: var(--text-400);
-  font-family: var(--font-family);
+  font-family: 'DM Sans', sans-serif;
   font-size: .82rem;
   font-weight: 500;
   cursor: pointer;
@@ -314,7 +314,7 @@ html, body {
   background: none;
   border: none;
   color: var(--text-400);
-  font-family: var(--font-family);
+  font-family: 'DM Sans', sans-serif;
   font-size: .82rem;
   font-weight: 500;
   cursor: pointer;
@@ -355,7 +355,7 @@ html, body {
   color: #1a0a00;
   border: none;
   border-radius: var(--radius);
-  font-family: var(--font-family);
+  font-family: 'DM Sans', sans-serif;
   font-size: .8rem;
   font-weight: 600;
   cursor: pointer;
@@ -370,7 +370,7 @@ html, body {
   padding: 9px 20px;
   background: var(--accent); color: #1a0a00;
   border: none; border-radius: var(--radius);
-  font-family: var(--font-family); font-size: .85rem; font-weight: 600;
+  font-family: 'DM Sans', sans-serif; font-size: .85rem; font-weight: 600;
   cursor: pointer; transition: background .15s, transform .15s;
 }
 .btn-primary:hover { background: var(--accent-hover); transform: translateY(-1px); }
@@ -379,7 +379,7 @@ html, body {
   padding: 9px 18px;
   background: transparent; border: none;
   color: var(--muted);
-  font-family: var(--font-family); font-size: .85rem; font-weight: 500;
+  font-family: 'DM Sans', sans-serif; font-size: .85rem; font-weight: 500;
   cursor: pointer; border-radius: var(--radius);
   transition: color .15s, background .15s;
 }
@@ -455,7 +455,7 @@ html, body {
 }
 
 .col-name {
-  font-family: var(--font-family);
+  font-family: 'Syne', sans-serif;
   font-size: .75rem;
   font-weight: 700;
   text-transform: uppercase;
@@ -511,7 +511,7 @@ html, body {
   background: none;
   border: 1px dashed var(--border);
   color: var(--text-500);
-  font-family: var(--font-family);
+  font-family: 'DM Sans', sans-serif;
   font-size: .78rem;
   cursor: pointer;
   transition: border-color .15s, color .15s, background .15s;
@@ -574,13 +574,6 @@ html, body {
 .task-card.complete .task-card-title {
   text-decoration: line-through;
   color: var(--text-500);
-}
-
-/* drag and drop ghost */
-.task-ghost {
-  opacity: 0.4;
-  background: var(--accent-dim) !important;
-  border: 2px dashed var(--accent) !important;
 }
 
 /* hidden by filter */
@@ -715,7 +708,7 @@ html, body {
   padding: 24px 28px 0;
 }
 .modal-header h2 {
-  font-family: var(--font-family);
+  font-family: 'Syne', sans-serif;
   font-size: 1.3rem;
   font-weight: 800;
   letter-spacing: -0.03em;
@@ -749,7 +742,7 @@ input[type="text"] {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   color: var(--text);
-  font-family: var(--font-family);
+  font-family: 'DM Sans', sans-serif;
   font-size: .84rem;
   padding: 9px 12px;
   outline: none;
@@ -767,7 +760,7 @@ input[type="text"]::placeholder { color: var(--text-500); }
   border: 1px solid var(--border);
   border-radius: var(--radius);
   color: var(--text);
-  font-family: var(--font-family);
+  font-family: 'DM Sans', sans-serif;
   font-size: .84rem;
   padding: 9px 12px;
   outline: none;
@@ -789,7 +782,7 @@ input[type="text"]::placeholder { color: var(--text-500); }
   border: 1px solid var(--border);
   border-radius: var(--radius);
   color: var(--text);
-  font-family: var(--font-family);
+  font-family: 'DM Sans', sans-serif;
   font-size: .84rem;
   padding: 9px 28px 9px 10px;
   cursor: pointer;
@@ -825,7 +818,7 @@ input[type="text"]::placeholder { color: var(--text-500); }
   background: var(--surface);
   border: 1px solid var(--border);
   color: var(--text-400);
-  font-family: var(--font-family);
+  font-family: 'DM Sans', sans-serif;
   font-size: .77rem; font-weight: 500;
   cursor: pointer;
   text-align: center;
@@ -933,7 +926,7 @@ input[type="text"]::placeholder { color: var(--text-500); }
 }
 
 .detail-title {
-  font-family: var(--font-family);
+  font-family: 'Syne', sans-serif;
   font-size: 1.35rem;
   font-weight: 700;
   letter-spacing: -0.02em;
@@ -973,7 +966,7 @@ input[type="text"]::placeholder { color: var(--text-500); }
   border: 1px solid var(--border);
   border-radius: var(--radius);
   color: var(--text);
-  font-family: var(--font-family);
+  font-family: 'DM Sans', sans-serif;
   font-size: .84rem;
   padding: 10px 12px;
   outline: none;
@@ -1044,7 +1037,7 @@ input[type="text"]::placeholder { color: var(--text-500); }
   border: 1px dashed var(--border);
   background: none;
   color: var(--text-500);
-  font-family: var(--font-family);
+  font-family: 'DM Sans', sans-serif;
   font-size: .78rem;
   cursor: pointer;
   transition: border-color .15s, color .15s, background .15s;
@@ -1074,7 +1067,7 @@ input[type="text"]::placeholder { color: var(--text-500); }
   border-radius: 50%;
   background: linear-gradient(135deg, var(--accent), #e05a7d);
   display: flex; align-items: center; justify-content: center;
-  font-family: var(--font-family);
+  font-family: 'Syne', sans-serif;
   font-size: .68rem; font-weight: 700;
   color: #fff;
   flex-shrink: 0;
@@ -1117,7 +1110,7 @@ input[type="text"]::placeholder { color: var(--text-500); }
   border: none;
   outline: none;
   color: var(--text);
-  font-family: var(--font-family);
+  font-family: 'DM Sans', sans-serif;
   font-size: .8rem;
   padding: 2px 4px;
 }
@@ -1193,7 +1186,7 @@ input[type="text"]::placeholder { color: var(--text-500); }
   background: var(--surface);
   border: 1px solid var(--border);
   color: var(--text-400);
-  font-family: var(--font-family);
+  font-family: 'DM Sans', sans-serif;
   font-size: .76rem; font-weight: 500;
   cursor: pointer;
   text-align: left;
@@ -1226,7 +1219,7 @@ input[type="text"]::placeholder { color: var(--text-500); }
   background: var(--surface);
   border: 1px solid var(--border);
   color: var(--text-400);
-  font-family: var(--font-family);
+  font-family: 'DM Sans', sans-serif;
   font-size: .78rem; font-weight: 500;
   cursor: pointer;
   transition: all .15s;

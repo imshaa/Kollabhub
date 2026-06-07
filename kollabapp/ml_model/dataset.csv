@@ -1,0 +1,296 @@
+text,intent
+hello,greeting
+hi there,greeting
+hey,greeting
+good morning,greeting
+good evening,greeting
+good afternoon,greeting
+greetings,greeting
+howdy,greeting
+hi kollab,greeting
+hello kollab ai,greeting
+hey there,greeting
+hi i need help,greeting
+hello can you assist me,greeting
+good day,greeting
+hi assistant,greeting
+hey i have a question,greeting
+hello i just joined,greeting
+hi how does this work,greeting
+hey what can you do,greeting
+hello i am new here,greeting
+how are you,greeting
+nice to meet you,greeting
+who are you,greeting
+what is your name,greeting
+introduce yourself,greeting
+create a task,task_create
+add a new task,task_create
+i want to create a task,task_create
+how do i add a task,task_create
+make a new task,task_create
+task create karo,task_create
+add task,task_create
+new task,task_create
+create assignment,task_create
+add new assignment,task_create
+i need to create a task,task_create
+can i add a task,task_create
+how to make a task,task_create
+task banana hai,task_create
+task bnao,task_create
+create a new task for me,task_create
+add task to board,task_create
+make task,task_create
+task add karo,task_create
+how do i create tasks,task_create
+set up a task,task_create
+i want to add work item,task_create
+create work item,task_create
+add work to board,task_create
+task banao,task_create
+show my tasks,task_query
+view my tasks,task_query
+what are my tasks,task_query
+list all tasks,task_query
+show all tasks,task_query
+my pending tasks,task_query
+what tasks do i have,task_query
+tasks assigned to me,task_query
+mera task dikhao,task_query
+incomplete tasks,task_query
+remaining tasks,task_query
+how many tasks do i have,task_query
+show task list,task_query
+view task board,task_query
+open taskboard,task_query
+all my assignments,task_query
+pending assignments,task_query
+what work do i have,task_query
+show pending work,task_query
+tasks dikhao,task_query
+what is assigned to me,task_query
+my work items,task_query
+task list dikhao,task_query
+view all assignments,task_query
+check my tasks,task_query
+what is the deadline,deadline
+when is the task due,deadline
+due date kya hai,deadline
+task deadline,deadline
+when is deadline,deadline
+upcoming deadlines,deadline
+overdue tasks,deadline
+late tasks,deadline
+deadline kab hai,deadline
+submission date,deadline
+last date kya hai,deadline
+kab tak karna hai,deadline
+check deadline,deadline
+task due date,deadline
+when do i need to submit,deadline
+how much time do i have,deadline
+deadline reminder,deadline
+set deadline,deadline
+update deadline,deadline
+change due date,deadline
+task expiry,deadline
+deadline schedule,deadline
+when is this due,deadline
+deadline for my task,deadline
+time remaining for task,deadline
+add member,member
+invite member,member
+how to add a team member,member
+invite someone to workspace,member
+add new user,member
+member add karo,member
+team member invite,member
+how to invite,member
+remove member,member
+delete member,member
+who is in my team,member
+team members list,member
+show all members,member
+view members,member
+add colleague,member
+invite colleague,member
+how many members,member
+member management,member
+add someone to team,member
+invite user to workspace,member
+new member add,member
+member kaise add karo,member
+send invitation,member
+workspace members,member
+team list dikhao,member
+help,help
+i need help,help
+can you help me,help
+assist me,help
+guide me,help
+how does this work,help
+what can you do,help
+i am confused,help
+i do not understand,help
+explain this to me,help
+help chahiye,help
+madad karo,help
+i need assistance,help
+support chahiye,help
+how do i use kollabhub,help
+explain features,help
+what features are available,help
+how does kollabhub work,help
+i need guidance,help
+tutorial chahiye,help
+how to use this platform,help
+what should i do,help
+where do i start,help
+help me understand,help
+kaise use karo,help
+workspace settings,workspace
+edit workspace,workspace
+update workspace,workspace
+workspace name change,workspace
+change workspace name,workspace
+workspace privacy,workspace
+delete workspace,workspace
+leave workspace,workspace
+workspace info,workspace
+my workspace,workspace
+workspace image change,workspace
+update workspace image,workspace
+workspace visibility,workspace
+public workspace,workspace
+private workspace,workspace
+workspace configuration,workspace
+workspace details,workspace
+workspace management,workspace
+how to edit workspace,workspace
+workspace kaise edit karo,workspace
+workspace ko delete karo,workspace
+leave my workspace,workspace
+workspace settings kahan hain,workspace
+change workspace settings,workspace
+workspace update karo,workspace
+send a message,message
+how to send message,message
+chat karna hai,message
+how to chat,message
+direct message,message
+send dm,message
+private message,message
+group message,message
+how to dm someone,message
+message kaise karo,message
+send message to teammate,message
+chat with team,message
+how to use chat,message
+general channel,message
+channel message,message
+team chat,message
+communicate with team,message
+msg kaise bhejo,message
+send message in channel,message
+how to talk to teammate,message
+messaging feature,message
+chat feature,message
+how to contact teammate,message
+message someone,message
+dm kaise karo,message
+update task status,status
+mark task as done,status
+task complete karo,status
+task finished,status
+mark complete,status
+task in progress,status
+move task to done,status
+change task status,status
+task status update,status
+task khatam hua,status
+done karo task,status
+task progress,status
+mark as complete,status
+task completed,status
+update progress,status
+task done karo,status
+how to complete a task,status
+task status change karo,status
+move to in progress,status
+task finished karo,status
+mark task done,status
+complete the task,status
+task ko done mark karo,status
+task status kya hai,status
+update my task status,status
+profile settings,settings
+edit profile,settings
+update profile,settings
+change profile picture,settings
+avatar change,settings
+display name change,settings
+change username,settings
+account settings,settings
+profile update karo,settings
+bio update,settings
+change my name,settings
+update my avatar,settings
+profile picture change karo,settings
+how to edit profile,settings
+personal settings,settings
+account update,settings
+change display name,settings
+profile kaise edit karo,settings
+update account info,settings
+settings kahan hain,settings
+notification settings,settings
+privacy settings,settings
+account management,settings
+profile information update,settings
+how to update profile,settings
+thank you,thanks
+thanks,thanks
+thank u,thanks
+many thanks,thanks
+great,thanks
+awesome,thanks
+perfect,thanks
+well done,thanks
+good job,thanks
+excellent,thanks
+brilliant,thanks
+that was helpful,thanks
+you are helpful,thanks
+shukriya,thanks
+jazakallah,thanks
+nice work,thanks
+good response,thanks
+that helped me,thanks
+appreciate it,thanks
+very helpful,thanks
+thanks for the help,thanks
+helpful response,thanks
+you helped me,thanks
+that is exactly what i needed,thanks
+thanks a lot,thanks
+bye,bye
+goodbye,bye
+see you later,bye
+take care,bye
+good night,bye
+good bye,bye
+alvida,bye
+khuda hafiz,bye
+signing off,bye
+i am leaving,bye
+see you,bye
+cya,bye
+i am done,bye
+logging off,bye
+have a good day,bye
+farewell,bye
+until next time,bye
+i will come back later,bye
+bye for now,bye
+okay bye,bye

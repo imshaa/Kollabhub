@@ -1,0 +1,892 @@
+/* ═══════════════════════════════════════════════════════════════════
+   auth.css — KollabHub Authentication Pages
+   Covers: signup, signup_verify_otp, login (+ forgot/reset screens)
+   
+   Paste the contents of this file into your main.css, or link it
+   as a separate stylesheet. All selectors are prefixed with .kh-
+   so they won't clash with your existing styles.
+
+   Fonts used: Syne (headings) + DM Sans (body)
+   These are loaded via Google Fonts in each HTML file's <head>.
+═══════════════════════════════════════════════════════════════════ */
+
+
+/* ── CSS Variables ──────────────────────────────────────────────── */
+:root {
+  --kh-bg:          #000000;          /* deep near-black page background  */
+  --kh-surface:     #0f0e0e;          /* card / elevated surface           */
+  --kh-surface-2:   #1a1a1a;          /* secondary surface (inputs)        */
+  --kh-border:      rgba(255,255,255,.07); /* subtle border                */
+  --kh-border-focus:rgba(232,180,168,.6);  /* peach focus ring              */
+
+  --kh-text:        #f0f0f5;          /* primary text                      */
+  --kh-text-sub:    #8b8b9e;          /* secondary/muted text              */
+  --kh-text-faint:  #44445a;          /* very faint (placeholders etc.)    */
+
+  /* Accent — peach pink theme */
+  --kh-accent:      #E8B4A8;
+  --kh-accent-light:#F5D5CC;
+  --kh-accent-glow: rgba(232,180,168,.25);
+  --kh-accent-hover:#D4A89E;
+
+  /* Semantic colors */
+  --kh-success:     #22c55e;
+  --kh-success-bg:  rgba(34,197,94,.1);
+  --kh-error:       #f43f5e;
+  --kh-error-bg:    rgba(244,63,94,.1);
+  --kh-warn:        #f59e0b;
+
+  /* Strength bar levels */
+  --kh-weak:        #f43f5e;
+  --kh-fair:        #f97316;
+  --kh-good:        #eab308;
+  --kh-strong:      #22c55e;
+
+  /* Layout */
+  --kh-radius:      14px;
+  --kh-radius-sm:   8px;
+  --kh-radius-xs:   6px;
+
+  /* Typography */
+  --font-head: 'Syne', sans-serif;
+  --font-body: 'DM Sans', sans-serif;
+}
+
+
+/* ── Base reset for auth pages ──────────────────────────────────── */
+.auth-page {
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+  background: var(--kh-bg);
+  color: var(--kh-text);
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+
+/* ── Animated background ────────────────────────────────────────── */
+.kh-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+/* Subtle dot grid */
+.kh-grid {
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(circle, rgba(255,255,255,.035) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+
+/* Glowing orbs */
+.kh-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: .18;
+  animation: kh-orb-drift 14s ease-in-out infinite alternate;
+}
+.kh-orb-1 {
+  width: 500px; height: 500px;
+  background: radial-gradient(circle, #E8B4A8, transparent 70%);
+  top: -180px; right: -120px;
+  animation-duration: 16s;
+}
+.kh-orb-2 {
+  width: 400px; height: 400px;
+  background: radial-gradient(circle, #F5D5CC, transparent 70%);
+  bottom: -140px; left: -100px;
+  animation-duration: 20s;
+  animation-direction: alternate-reverse;
+}
+
+@keyframes kh-orb-drift {
+  from { transform: translate(0, 0) scale(1); }
+  to   { transform: translate(30px, -30px) scale(1.08); }
+}
+
+
+/* ── Page wrapper ───────────────────────────────────────────────── */
+/* Centers content vertically + horizontally, stacks header + card */
+.kh-wrap {
+  position: relative;
+  z-index: 1;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 20px 60px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* Hidden screens */
+.kh-hidden {
+  display: none !important;
+}
+
+/* Entrance animation — add class via JS */
+.kh-wrap.animate-in .kh-header,
+.kh-wrap.animate-in .kh-card {
+  animation: kh-slide-up .45s cubic-bezier(.22,1,.36,1) both;
+}
+.kh-wrap.animate-in .kh-card {
+  animation-delay: .06s;
+}
+
+@keyframes kh-slide-up {
+  from { opacity: 0; transform: translateY(22px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+
+/* ── Back button ────────────────────────────────────────────────── */
+.kh-back {
+  position: absolute;
+  top: 24px;
+  left: 24px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--kh-text-sub);
+  text-decoration: none;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 6px 10px;
+  border-radius: var(--kh-radius-xs);
+  transition: color .2s, background .2s;
+}
+.kh-back:hover {
+  color: var(--kh-text);
+  background: rgba(255,255,255,.05);
+}
+
+
+/* ── Header block (logo + title + subtitle) ─────────────────────── */
+.kh-header {
+  text-align: center;
+  margin-bottom: 28px;
+  width: 100%;
+  max-width: 420px;
+}
+
+/* Logo badge */
+.kh-logo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px; height: 52px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #E8B4A8 0%, #F5D5CC 100%);
+  font-family: var(--font-head);
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: #0d0d0d;
+  margin-bottom: 18px;
+  box-shadow: 0 0 32px var(--kh-accent-glow);
+  letter-spacing: -.02em;
+}
+
+/* Variant: verify/success checkmark logo */
+.kh-logo-verify {
+  background: linear-gradient(135deg, #10b981 0%, #22c55e 100%);
+  box-shadow: 0 0 32px rgba(34,197,94,.35);
+  font-size: 1.3rem;
+}
+.kh-logo-success {
+  background: linear-gradient(135deg, #10b981 0%, #22c55e 100%);
+  box-shadow: 0 0 40px rgba(34,197,94,.5);
+  animation: kh-success-pulse 1.5s ease infinite;
+}
+@keyframes kh-success-pulse {
+  0%, 100% { box-shadow: 0 0 32px rgba(34,197,94,.35); }
+  50%       { box-shadow: 0 0 56px rgba(34,197,94,.65); }
+}
+
+.kh-title {
+  font-family: var(--font-head);
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--kh-text);
+  margin: 0 0 8px;
+  letter-spacing: -.03em;
+  line-height: 1.2;
+}
+
+.kh-sub {
+  font-size: 14px;
+  color: var(--kh-text-sub);
+  margin: 0;
+  line-height: 1.6;
+}
+
+/* Highlighted email inside subtitle */
+.kh-email-highlight {
+  color: var(--kh-accent-hover);
+  font-style: normal;
+}
+
+
+/* ── Card ───────────────────────────────────────────────────────── */
+.kh-card {
+  width: 100%;
+  max-width: 420px;
+  background: var(--kh-surface);
+  border: 1px solid var(--kh-border);
+  border-radius: var(--kh-radius);
+  padding: 32px;
+  box-shadow: 0 4px 40px rgba(0,0,0,.45), 0 0 0 1px rgba(255,255,255,.02);
+  box-sizing: border-box;
+}
+
+
+/* ── Alert / feedback banners ───────────────────────────────────── */
+.kh-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: var(--kh-radius-sm);
+  font-size: 13.5px;
+  line-height: 1.5;
+  margin-bottom: 20px;
+  animation: kh-slide-up .3s ease both;
+  transition: opacity .3s, transform .3s;
+}
+.kh-alert svg { flex-shrink: 0; margin-top: 1px; }
+
+.kh-alert-error {
+  background: var(--kh-error-bg);
+  border: 1px solid rgba(244,63,94,.25);
+  color: #fca5a5;
+}
+.kh-alert-success {
+  background: var(--kh-success-bg);
+  border: 1px solid rgba(34,197,94,.25);
+  color: #86efac;
+}
+
+/* Info banner (email hint on OTP screens) */
+.kh-info-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #272829;
+  border: 1px solid #272424;
+  border-radius: var(--kh-radius-sm);
+  padding: 11px 14px;
+  font-size: 13px;
+  /* color: #a5b4fc; */
+  color: var(--kh-text-sub);
+  margin-bottom: 22px;
+}
+.kh-info-banner svg { flex-shrink: 0; }
+
+
+/* ── Form fields ────────────────────────────────────────────────── */
+.kh-field {
+  margin-bottom: 20px;
+}
+
+/* Label row — used when we need label + forgot-password link side by side */
+.kh-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.kh-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--kh-text-sub);
+  margin-bottom: 6px;
+  letter-spacing: .01em;
+}
+
+/* Required / optional badges */
+.kh-req     { color: var(--kh-error); margin-left: 2px; }
+.kh-optional{ font-weight: 400; color: var(--kh-text-faint); font-size: 12px; }
+
+/* Input wrapper — holds icon, input, and eye toggle */
+.kh-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.kh-icon {
+  position: absolute;
+  left: 14px;
+  color: var(--kh-text-faint);
+  pointer-events: none;
+  flex-shrink: 0;
+}
+
+.kh-input {
+  width: 100%;
+  padding: 11px 14px 11px 42px;
+  background: var(--kh-surface-2);
+  border: 1px solid var(--kh-border);
+  border-radius: var(--kh-radius-sm);
+  color: var(--kh-text);
+  font-family: var(--font-body);
+  font-size: 14px;
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color .2s, box-shadow .2s;
+  -webkit-appearance: none;
+}
+.kh-input::placeholder { color: var(--kh-text-faint); }
+.kh-input:focus {
+  border-color: var(--kh-border-focus);
+  box-shadow: 0 0 0 3px #E8B4A8;
+}
+
+/* Password show/hide toggle button */
+.kh-eye {
+  position: absolute;
+  right: 12px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--kh-text-faint);
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  border-radius: 4px;
+  transition: color .2s;
+}
+.kh-eye:hover { color: var(--kh-text-sub); }
+
+/* Forgot-password text button (inside label row) */
+.kh-text-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 12.5px;
+  font-family: var(--font-body);
+  color: var(--kh-accent-hover);
+  padding: 0;
+  transition: color .2s;
+}
+.kh-text-btn:hover { color: #fff; }
+
+
+/* ── Field feedback messages ────────────────────────────────────── */
+/* Inline messages under fields (match/no-match, email invalid etc.) */
+.kh-field-msg {
+  display: block;
+  font-size: 12.5px;
+  margin-top: 6px;
+  min-height: 18px;
+  transition: color .2s;
+}
+.kh-field-msg.success { color: var(--kh-success); }
+.kh-field-msg.error   { color: var(--kh-error);   }
+
+
+/* ── Password strength meter ────────────────────────────────────── */
+/* Hidden by default — JS adds .visible class when user types */
+.kh-strength-wrap {
+  margin-top: 10px;
+  display: none;
+  align-items: center;
+  gap: 10px;
+}
+.kh-strength-wrap.visible { display: flex; }
+
+.kh-strength-bars {
+  display: flex;
+  gap: 4px;
+  flex: 1;
+}
+
+.kh-bar {
+  flex: 1;
+  height: 4px;
+  border-radius: 99px;
+  background: rgba(255,255,255,.08);
+  transition: background .3s;
+}
+/* Strength level classes set via JS */
+.kh-bar.weak   { background: var(--kh-weak);   }
+.kh-bar.fair   { background: var(--kh-fair);   }
+.kh-bar.good   { background: var(--kh-good);   }
+.kh-bar.strong { background: var(--kh-strong); }
+
+.kh-strength-label {
+  font-size: 12px;
+  font-weight: 600;
+  width: 46px;
+  text-align: right;
+  flex-shrink: 0;
+  letter-spacing: .02em;
+}
+.kh-strength-label.weak   { color: var(--kh-weak);   }
+.kh-strength-label.fair   { color: var(--kh-fair);   }
+.kh-strength-label.good   { color: var(--kh-good);   }
+.kh-strength-label.strong { color: var(--kh-strong); }
+
+
+/* ── Password requirements checklist ────────────────────────────── */
+/* Hidden by default — JS adds .visible when user starts typing */
+.kh-reqs {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: none;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 12px;
+  padding: 14px;
+  background: rgba(255,255,255,.025);
+  border: 1px solid var(--kh-border);
+  border-radius: var(--kh-radius-sm);
+}
+.kh-reqs.visible { display: flex; }
+
+.kh-req-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--kh-text-faint);
+  transition: color .25s;
+}
+.kh-req-item.met { color: var(--kh-success); }
+
+/* The dot/tick indicator */
+.kh-req-dot {
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  border: 1.5px solid currentColor;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background .25s, border-color .25s;
+  font-size: 9px;
+  position: relative;
+}
+/* Filled tick when met */
+.kh-req-item.met .kh-req-dot {
+  background: var(--kh-success);
+  border-color: var(--kh-success);
+}
+.kh-req-item.met .kh-req-dot::after {
+  content: '✓';
+  color: #fff;
+  font-weight: 700;
+  font-size: 9px;
+}
+
+
+/* ── OTP digit grid ─────────────────────────────────────────────── */
+.kh-otp-grid {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  margin: 16px 0 24px;
+}
+
+.kh-otp-cell {
+  width: 48px; height: 54px;
+  background: var(--kh-surface-2);
+  border: 1.5px solid var(--kh-border);
+  border-radius: var(--kh-radius-sm);
+  color: var(--kh-text);
+  font-family: 'Syne', monospace;
+  font-size: 1.35rem;
+  font-weight: 700;
+  text-align: center;
+  outline: none;
+  transition: border-color .2s, box-shadow .2s, background .2s;
+  -webkit-appearance: none;
+  letter-spacing: .05em;
+}
+.kh-otp-cell:focus {
+  border-color: var(--kh-border-focus);
+  box-shadow: 0 0 0 3px #E8B4A8;
+  background: rgba(99,102,241,.06);
+}
+.kh-otp-cell.filled {
+  border-color: var(--kh-accent);
+  background: rgba(232,180,168,.12);
+  color: #fff;
+}
+
+
+/* ── Submit button ──────────────────────────────────────────────── */
+.kh-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 13px 20px;
+  background: linear-gradient(135deg, #E8B4A8 0%, #F5D5CC 100%);
+  border: none;
+  border-radius: var(--kh-radius-sm);
+  color: #0d0d0d;
+  font-family: var(--font-head);
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-top: 8px;
+  transition: box-shadow .2s, background .2s, transform .2s;
+  box-shadow: 0 4px 16px rgba(232,180,168,.18);
+  letter-spacing: -.01em;
+  position: relative;
+  overflow: hidden;
+}
+.kh-btn::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, rgba(255,255,255,.05) 0%, rgba(255,255,255,0) 100%);
+  opacity: 0;
+  transition: opacity .2s;
+}
+.kh-btn:hover:not(:disabled)::before {
+  opacity: 1;
+}
+.kh-btn:hover:not(:disabled) {
+  box-shadow: 0 5px 18px rgba(232,180,168,.2);
+  transform: translateY(-1px);
+}
+.kh-btn:active:not(:disabled) {
+  box-shadow: 0 3px 12px rgba(232,180,168,.18);
+  transform: translateY(0);
+}
+
+/* Disabled state — set by JS when requirements not met */
+.kh-btn:disabled {
+  opacity: .35;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+
+/* ── Footer links & resend ──────────────────────────────────────── */
+.kh-foot {
+  text-align: center;
+  margin: 22px 0 0;
+  font-size: 13.5px;
+  color: var(--kh-text-sub);
+}
+
+.kh-link {
+  color: var(--kh-accent-hover);
+  text-decoration: none;
+  font-weight: 500;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: inherit;
+  padding: 0;
+  transition: color .2s;
+}
+.kh-link:hover { color: #fff; text-decoration: underline; }
+
+/* ── Legacy auth helper classes for forgot/reset screens ─────── */
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 14px;
+  border-radius: 18px;
+  border: 1px solid rgba(255,255,255,.08);
+  background: rgba(255,255,255,.03);
+  color: var(--kh-text);
+  text-decoration: none;
+  font-weight: 500;
+  transition: all .25s ease;
+}
+.back-link:hover {
+  border-color: rgba(232,180,168,.4);
+  background: rgba(232,180,168,.08);
+  color: #fff;
+}
+
+.auth-container {
+  position: relative;
+  z-index: 1;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 20px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 520px;
+  background: var(--kh-surface);
+  border: 1px solid var(--kh-border);
+  border-radius: var(--kh-radius);
+  padding: 32px;
+  box-shadow: 0 20px 60px rgba(0,0,0,.55);
+}
+
+.auth-header {
+  text-align: center;
+  margin-bottom: 28px;
+}
+
+.auth-logo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #E8B4A8 0%, #F5D5CC 100%);
+  font-family: var(--font-head);
+  font-size: 1.4rem;
+  font-weight: 800;
+  color: #0d0d0d;
+  margin: 0 auto 16px;
+  box-shadow: 0 0 30px rgba(232,180,168,.22);
+}
+
+.auth-title {
+  font-family: var(--font-head);
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--kh-text);
+  margin: 0 0 10px;
+  letter-spacing: -.03em;
+  line-height: 1.1;
+}
+
+.auth-subtitle {
+  margin: 0;
+  color: var(--kh-text-sub);
+  font-size: 0.95rem;
+  line-height: 1.6;
+}
+
+.auth-form .form-group {
+  margin-bottom: 1.2rem;
+}
+
+.form-label {
+  display: block;
+  margin-bottom: 0.75rem;
+  color: var(--kh-text);
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.input-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  background: var(--kh-surface-2);
+  border: 1px solid rgba(255,255,255,.06);
+  border-radius: 16px;
+  padding: 0 14px;
+}
+
+.input-icon {
+  width: 18px;
+  height: 18px;
+  color: var(--kh-text-sub);
+  flex-shrink: 0;
+}
+
+.form-input {
+  width: 100%;
+  border: none;
+  outline: none;
+  background: none;
+  color: var(--kh-text);
+  padding: 16px 0;
+  font-family: inherit;
+  font-size: 0.95rem;
+}
+
+.form-input::placeholder {
+  color: var(--kh-text-faint);
+}
+
+.auth-footer {
+  margin-top: 1.5rem;
+  color: var(--kh-text-sub);
+  font-size: 0.95rem;
+  text-align: center;
+}
+
+.auth-footer .auth-link {
+  color: var(--kh-accent);
+}
+
+.error-wrapper,
+.success-wrapper {
+  border-radius: var(--kh-radius-sm);
+  padding: 16px 18px;
+  margin-bottom: 1rem;
+}
+
+.error-wrapper {
+  background: rgba(244,63,94,.08);
+  border: 1px solid rgba(244,63,94,.2);
+  color: #fee2e2;
+}
+
+.error-message {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  color: #fee2e2;
+  font-size: 0.95rem;
+}
+
+.error-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  font-size: 1rem;
+  border-radius: 999px;
+  background: rgba(244,63,94,.15);
+}
+
+.success-wrapper {
+  background: rgba(232,180,168,.12);
+  border: 1px solid rgba(232,180,168,.3);
+  color: var(--kh-text);
+}
+
+.success-message {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  color: var(--kh-text);
+}
+
+.success-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  font-size: 1rem;
+  border-radius: 999px;
+  background: rgba(232,180,168,.25);
+  color: #0d0d0d;
+}
+
+.info-text {
+  background: rgba(232,180,168,.08);
+  border: 1px solid rgba(232,180,168,.2);
+  color: var(--kh-text);
+  padding: 1rem;
+  border-radius: 12px;
+  font-size: 0.95rem;
+  margin-bottom: 1.5rem;
+}
+
+.password-strength {
+  display: flex;
+  gap: 0.4rem;
+  margin-top: 0.75rem;
+}
+
+.strength-bar {
+  flex: 1;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(255,255,255,.08);
+  transition: background .25s;
+}
+
+.strength-bar.weak { background: #f43f5e; }
+.strength-bar.fair { background: #f97316; }
+.strength-bar.good { background: #eab308; }
+.strength-bar.strong { background: #22c55e; }
+
+.password-requirements {
+  margin-top: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+  color: var(--kh-text-sub);
+}
+
+.requirement {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.requirement-icon {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid rgba(255,255,255,.12);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--kh-text-sub);
+  font-size: 0.65rem;
+}
+
+.requirement.met { color: var(--kh-text); }
+.requirement.met .requirement-icon {
+  border-color: var(--kh-accent);
+  background: rgba(232,180,168,.15);
+  color: var(--kh-accent);
+}
+
+.retry-link {
+  display: inline-block;
+  margin-top: 1rem;
+  color: var(--kh-accent);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.retry-link:hover { color: var(--kh-accent-hover); }
+
+.kh-resend {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 22px;
+  padding-top: 20px;
+  border-top: 1px solid var(--kh-border);
+  font-size: 13px;
+  color: var(--kh-text-sub);
+}
+.kh-resend-btn {
+  font-size: 13px;
+}
+
+
+/* ── Responsive tweaks ───────────────────────────────────────────── */
+@media (max-width: 480px) {
+  .kh-card     { padding: 24px 20px; }
+  .kh-title    { font-size: 1.5rem; }
+  .kh-otp-cell { width: 42px; height: 48px; font-size: 1.2rem; }
+  .kh-wrap     { padding: 40px 16px 56px; }
+}

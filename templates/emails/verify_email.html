@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Verify your KollabHub account</title>
+</head>
+<body style="margin:0;padding:0;background:#0a0a0f;font-family:'Segoe UI',system-ui,sans-serif;">
+
+  <table width="100%" cellpadding="0" cellspacing="0"
+    style="background:#0a0a0f;padding:48px 16px 56px;">
+    <tr><td align="center">
+
+      <!-- ── Card ──────────────────────────────────────── -->
+      <table width="560" cellpadding="0" cellspacing="0"
+        style="max-width:560px;width:100%;background:#111118;
+               border-radius:20px;overflow:hidden;
+               border:1px solid rgba(255,255,255,.07);
+               box-shadow:0 0 0 1px rgba(232,180,168,.06),
+                          0 12px 64px rgba(0,0,0,.7),
+                          0 0 80px rgba(232,180,168,.04);">
+
+        <!-- Header glow strip -->
+        <tr>
+          <td style="height:3px;
+                     background:linear-gradient(90deg,transparent,#E8B4A8 40%,#F5D5CC 60%,transparent);
+                     padding:0;line-height:0;font-size:0;">&nbsp;</td>
+        </tr>
+
+        <!-- ── Header ─────────────────────────────────── -->
+        <tr>
+          <td style="padding:36px 40px 28px;text-align:center;">
+            <!-- Logo badge -->
+            <div style="display:inline-flex;align-items:center;justify-content:center;
+                        width:52px;height:52px;
+                        background:linear-gradient(135deg,#E8B4A8 0%,#c9907f 100%);
+                        border-radius:16px;font-size:24px;font-weight:800;color:#0a0a0f;
+                        line-height:1;text-align:center;letter-spacing:-.03em;margin-bottom:16px;
+                        box-shadow:0 0 32px rgba(232,180,168,.3);">K</div>
+            <h1 style="margin:0 0 4px;font-size:11px;font-weight:600;
+                       color:#E8B4A8;letter-spacing:.12em;text-transform:uppercase;">
+              KollabHub
+            </h1>
+            <p style="margin:0;font-size:11px;color:rgba(255,255,255,.25);
+                      letter-spacing:.06em;text-transform:uppercase;">
+              Build &middot; Collaborate &middot; Ship
+            </p>
+          </td>
+        </tr>
+
+        <!-- Divider -->
+        <tr>
+          <td style="padding:0 40px;">
+            <div style="height:1px;background:rgba(255,255,255,.05);"></div>
+          </td>
+        </tr>
+
+        <!-- ── Body ──────────────────────────────────── -->
+        <tr>
+          <td style="padding:32px 40px 0;">
+            <h2 style="margin:0 0 12px;font-size:22px;font-weight:700;
+                       color:#f5f0ed;line-height:1.25;letter-spacing:-.02em;">
+              Verify your email address
+            </h2>
+            <p style="margin:0 0 28px;font-size:14.5px;
+                      color:rgba(255,255,255,.45);line-height:1.75;">
+              Hi <strong style="color:#E8B4A8;font-weight:600;">{{ username }}</strong>,
+              thanks for signing up! Enter the code below to activate your account.
+              It expires in <strong style="color:rgba(255,255,255,.65);">10 minutes</strong>.
+            </p>
+          </td>
+        </tr>
+
+        <!-- ── OTP box ────────────────────────────────── -->
+        <tr>
+          <td style="padding:0 40px 28px;">
+            <table width="100%" cellpadding="0" cellspacing="0">
+              <tr>
+                <td align="center"
+                  style="background:#17171f;
+                         border:1px solid rgba(232,180,168,.2);
+                         border-radius:14px;padding:28px 20px;
+                         box-shadow:0 0 40px rgba(232,180,168,.06) inset;">
+                  <p style="margin:0 0 10px;font-size:11px;font-weight:600;
+                             color:rgba(232,180,168,.6);text-transform:uppercase;
+                             letter-spacing:.14em;">
+                    Verification code
+                  </p>
+                  <!-- OTP digits with generous letter-spacing -->
+                  <p style="margin:0;font-size:48px;font-weight:700;
+                             color:#F5D5CC;letter-spacing:14px;
+                             font-family:'Courier New',Courier,monospace;
+                             line-height:1;padding-left:14px;">
+                    {{ otp }}
+                  </p>
+                  <p style="margin:12px 0 0;font-size:12px;
+                             color:rgba(255,255,255,.25);">
+                    Valid for <strong style="color:rgba(255,255,255,.45);">10 minutes</strong>
+                    &nbsp;&bull;&nbsp; Do not share this code
+                  </p>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- ── Security note ──────────────────────────── -->
+        <tr>
+          <td style="padding:0 40px 32px;">
+            <table width="100%" cellpadding="0" cellspacing="0">
+              <tr>
+                <td style="background:rgba(232,180,168,.06);
+                           border:1px solid rgba(232,180,168,.12);
+                           border-radius:10px;padding:14px 16px;">
+                  <p style="margin:0 0 3px;font-size:12.5px;font-weight:600;
+                             color:#E8B4A8;">
+                    🔒 Security reminder
+                  </p>
+                  <p style="margin:0;font-size:13px;
+                             color:rgba(255,255,255,.35);line-height:1.6;">
+                    KollabHub staff will <strong style="color:rgba(255,255,255,.55);">never</strong>
+                    ask for this code. If you didn't create an account, ignore this email.
+                  </p>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- ── Footer ────────────────────────────────── -->
+        <tr>
+          <td style="padding:0 40px;">
+            <div style="height:1px;background:rgba(255,255,255,.05);"></div>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:20px 40px 28px;text-align:center;">
+            <p style="margin:0 0 6px;font-size:12px;color:rgba(255,255,255,.2);">
+              &copy; 2025 KollabHub &mdash; Build &middot; Collaborate &middot; Ship
+            </p>
+            <p style="margin:0;font-size:11px;color:rgba(255,255,255,.12);">
+              <a href="#" style="color:rgba(255,255,255,.2);text-decoration:none;">Privacy</a>
+              &nbsp;&middot;&nbsp;
+              <a href="#" style="color:rgba(255,255,255,.2);text-decoration:none;">Terms</a>
+              &nbsp;&middot;&nbsp;
+              <a href="#" style="color:rgba(255,255,255,.2);text-decoration:none;">Unsubscribe</a>
+            </p>
+          </td>
+        </tr>
+
+      </table>
+      <!-- /Card -->
+
+    </td></tr>
+  </table>
+</body>
+</html>

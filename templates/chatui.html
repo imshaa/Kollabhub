@@ -3,17 +3,16 @@
 
 {% block title %}Chat – KollabHub{% endblock %}
 
-{% block nav_chat %}active{% endblock %}
-
 {% block extra_css %}
-<style>
-    #aiFab { display: none !important; }
-</style>
+  <link rel="stylesheet" href="{% static 'css/chat.css' %}"/>
+  <link rel="stylesheet" href="{% static 'css/call.css' %}"/>
 {% endblock %}
+
+{% block nav_chat %}active{% endblock %}
 
 {% block main_content %}
 
-  <!-- ── VIEW: CHAT ── -->
+  <!-- ── VIEW: CHAT ──────────────────── -->
   <div class="view active" id="view-chat">
     <header class="view-header">
       <div class="view-header-left">
@@ -74,8 +73,267 @@
     </div>
   </div>
 
+  <!-- ── VIEW: SETTINGS ─────────────── -->
+  <div class="view" id="view-settings">
+    <header class="view-header">
+      <div class="view-header-left">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93A10 10 0 1 0 4.93 19.07 10 10 0 0 0 19.07 4.93z"/></svg>
+        <h2 class="view-title">Admin Settings</h2>
+        <span class="view-subtitle">Manage your workspace</span>
+      </div>
+    </header>
+
+    <div class="settings-body">
+      <div class="tab-bar">
+        <button class="tab active" data-tab="users">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          Users
+        </button>
+        <button class="tab" data-tab="privacy">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          Privacy
+        </button>
+        <button class="tab" data-tab="invitations">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+          Invitations
+        </button>
+        <button class="tab tab--danger" data-tab="danger">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          Danger Zone
+        </button>
+        <div class="tab-indicator" id="tabIndicator"></div>
+      </div>
+
+      <!-- Tab: Users -->
+      <div class="tab-panel active" id="tab-users">
+        <div class="tab-panel-header">
+          <div>
+            <h3>Members</h3>
+            <p id="memberCountText">Loading members...</p>
+          </div>
+          <button class="btn-accent-sm" id="inviteMemberBtn">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Invite Member
+          </button>
+        </div>
+        <div class="member-list" id="memberList"></div>
+      </div>
+
+      <!-- Tab: Privacy -->
+      <div class="tab-panel" id="tab-privacy">
+        <h3 class="panel-title">Privacy Controls</h3>
+        <p class="panel-sub">Control who can access and interact with your workspace</p>
+        <div class="settings-card">
+          <p class="settings-card-title">Workspace Visibility</p>
+          <p class="settings-card-sub">Control who can discover and join</p>
+          <div class="vis-toggle">
+            <button class="vis-opt active" id="visPublic">🔓 Public <span>Anyone can join</span></button>
+            <button class="vis-opt" id="visPrivate">🔒 Private <span>Invite only</span></button>
+          </div>
+        </div>
+        <div class="settings-card divide">
+          <div class="toggle-row">
+            <div>
+              <p class="toggle-label">Who can send invites</p>
+              <p class="toggle-hint">Only admins can invite new members</p>
+            </div>
+            <div class="toggle-group">
+              <span>All Members</span>
+              <button class="toggle active" id="inviteToggle"><span class="toggle-knob"></span></button>
+              <span>Admins Only</span>
+            </div>
+          </div>
+          <div class="toggle-row">
+            <div>
+              <p class="toggle-label">Restrict profile visibility</p>
+              <p class="toggle-hint">Members only see profiles they interact with</p>
+            </div>
+            <button class="toggle" id="profileToggle"><span class="toggle-knob"></span></button>
+          </div>
+          <div class="toggle-row">
+            <div>
+              <p class="toggle-label">Message history retention</p>
+              <p class="toggle-hint">How long to keep message history</p>
+            </div>
+            <select class="select-sm" id="messageRetentionSelect">
+              <option>Forever</option>
+              <option>90 Days</option>
+              <option>30 Days</option>
+              <option>7 Days</option>
+            </select>
+          </div>
+        </div>
+        <div class="save-row">
+          <button class="btn-accent-sm" id="savePrivacyBtn">Save Changes</button>
+          <span class="save-confirm" id="saveConfirm">✓ Saved!</span>
+        </div>
+      </div>
+
+      <!-- Tab: Invitations -->
+      <div class="tab-panel" id="tab-invitations">
+        <div class="tab-panel-header">
+          <div>
+            <h3>Active Invite Links</h3>
+            <p>Shareable links for joining</p>
+          </div>
+          <button class="btn-outline-sm" id="createInviteBtn">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Create New Link
+          </button>
+        </div>
+        <div class="invite-links" id="inviteLinks"></div>
+
+        <h3 style="margin:28px 0 12px;font-size:.95rem;">Send Invitations</h3>
+        <div class="settings-card">
+          <div style="display:grid;gap:12px;">
+            <div>
+              <label class="field-label">Email or Username</label>
+              <textarea id="identifierInviteInput" class="invite-textarea" placeholder="jane@company.com, john_doe, bob@startup.io..." rows="3" style="resize:vertical;"></textarea>
+            </div>
+            <div>
+              <label class="field-label">Invite As</label>
+              <select id="roleSelect" class="select-sm" style="width:100%;">
+                <option value="member">Member</option>
+                <option value="admin">Admin</option>
+              </select>
+            </div>
+          </div>
+          <div class="save-row" style="margin-top:12px;">
+            <button class="btn-accent-sm" id="sendIdentifierInviteBtn">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+              Send Invitations
+            </button>
+            <span class="save-confirm" id="sendInviteMsg">✓ Sent!</span>
+          </div>
+        </div>
+
+        <h3 style="margin:28px 0 12px;font-size:.95rem;">Sent Invitations</h3>
+        <div class="invite-list" id="sentInvitesList"></div>
+      </div>
+
+      <!-- Tab: Danger -->
+      <div class="tab-panel" id="tab-danger">
+        <h3 class="panel-title" style="color:var(--red)">Danger Zone</h3>
+        <p class="panel-sub">These actions are irreversible. Proceed with caution.</p>
+
+        <div class="danger-card orange">
+          <h4>Transfer Ownership</h4>
+          <p>Transfer admin ownership to another member. You will become a regular member.</p>
+          <div class="danger-row">
+            <select class="select-sm" id="transferSelect" style="flex:1;">
+              <option value="">Select a member…</option>
+            </select>
+            <button class="btn-orange-sm" id="transferBtn">Transfer</button>
+          </div>
+        </div>
+
+        <div class="danger-card orange">
+          <h4>Leave Workspace</h4>
+          <p>Remove yourself from this workspace. Members can leave anytime, but admins must transfer ownership first.</p>
+          <button class="btn-orange-sm" id="leaveWorkspaceBtn">Leave Workspace</button>
+        </div>
+
+        <div class="danger-card red">
+          <div class="danger-icon-row">
+            <div class="danger-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+            </div>
+            <div>
+              <h4>Delete Workspace</h4>
+              <p>Permanently delete this workspace and all its data. This cannot be undone.</p>
+            </div>
+          </div>
+          <div id="deleteConfirmArea" style="display:none;" class="delete-confirm-area">
+            <p class="delete-confirm-label">Type <code id="workspaceNameConfirm">{{ workspace.title }}</code> to confirm:</p>
+            <input type="text" id="deleteConfirmInput" class="delete-confirm-input" placeholder="Type workspace name…"/>
+            <div style="display:flex;gap:8px;margin-top:8px;">
+              <button class="btn-cancel-sm" id="cancelDeleteBtn">Cancel</button>
+              <button class="btn-delete-sm" id="confirmDeleteBtn" disabled>Permanently Delete</button>
+            </div>
+          </div>
+          <button class="btn-red-sm" id="showDeleteBtn">Delete Workspace</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════
+     CALL MODAL  (Daily.co Prebuilt UI)
+══════════════════════════════════ -->
+
+<!-- Incoming call notification banner -->
+<div id="incomingCallBanner" class="incoming-call-banner" style="display:none;">
+  <div class="incoming-call-inner">
+    <div class="incoming-call-avatar" id="incomingCallerAvatar"></div>
+    <div class="incoming-call-info">
+      <span class="incoming-call-name" id="incomingCallerName">Someone</span>
+      <span class="incoming-call-label" id="incomingCallLabel">is calling…</span>
+    </div>
+    <div class="incoming-call-actions">
+      <button class="call-action-btn call-decline-btn" id="incomingDeclineBtn" title="Decline">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4
+            1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4
+            1-1 1-9.4 0-17-7.6-17-17 0-.6.4-1 1-1h3.5c.6 0 1
+            .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1L6.6 10.8z"/>
+        </svg>
+      </button>
+      <button class="call-action-btn call-accept-btn" id="incomingAcceptBtn" title="Accept">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4
+            1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4
+            1-1 1-9.4 0-17-7.6-17-17 0-.6.4-1 1-1h3.5c.6 0 1
+            .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1L6.6 10.8z"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Call modal overlay -->
+<div id="callModal" class="call-modal-overlay" style="display:none;">
+  <div class="call-modal-box">
+    <div class="call-modal-header">
+      <span class="call-modal-title" id="callModalTitle">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2">
+          <path d="m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.87a.5.5
+            0 0 0-.752-.432L16 10.5"/>
+          <rect x="2" y="6" width="14" height="12" rx="2"/>
+        </svg>
+        <span id="callModalTitleText">Call</span>
+      </span>
+      <button class="call-modal-end-btn" id="callEndBtn" title="End call">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4
+            1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4
+            1-1 1-9.4 0-17-7.6-17-17 0-.6.4-1 1-1h3.5c.6 0 1
+            .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1L6.6 10.8z"/>
+        </svg>
+        End Call
+      </button>
+    </div>
+    <!-- Daily Prebuilt iframe renders here -->
+    <div class="call-modal-frame-wrap" id="callFrameWrap">
+      <div class="call-connecting-msg" id="callConnectingMsg">
+        <div class="call-spinner"></div>
+        <span>Connecting…</span>
+      </div>
+    </div>
+  </div>
+</div>
+
 {% endblock %}
 
 {% block extra_js %}
+{# Daily.co SDK — official CDN, always exposes window.DailyIframe #}
+<script crossorigin src="https://unpkg.com/@daily-co/daily-js"></script>
+ 
+{# Your existing chat logic #}
 <script src="{% static 'js/chatui.js' %}"></script>
+ 
+{# Call system — must come AFTER both of the above #}
+<script src="{% static 'js/call.js' %}"></script>
 {% endblock %}
+ 

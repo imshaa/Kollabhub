@@ -1,0 +1,879 @@
+/* ═══════════════════════════════════════════════════════════
+   KOLLABHUB  —  style.css  (single unified stylesheet)
+   All workspace-nav / workspace-card styles are rewritten
+   to use the same design tokens as the rest of the app.
+   No more duplicate / conflicting variable names.
+═══════════════════════════════════════════════════════════ */
+
+/* ─────────────────────────────────────────────────────────
+   1. RESET
+───────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* ─────────────────────────────────────────────────────────
+   2. DESIGN TOKENS  (single source of truth)
+   ─ All colours, radii, shadows defined once here.
+   ─ The old workspace CSS used --color-*, --shadow-* names;
+     those are now aliased below so any legacy references
+     still resolve correctly without a second stylesheet.
+───────────────────────────────────────────────────────── */
+:root {
+  /* ── Backgrounds ── */
+  --bg:            #0d0d0d;
+  --surface:       #1a1a1a;
+  --surface2:      #222222;
+  --card-bg:       #161616;          /* workspace cards */
+
+  /* ── Borders ── */
+  --border:        #272727;
+  --border-soft:   rgba(255,255,255,0.05);
+  --border-focus:  #484848;
+
+  /* ── Text ── */
+  --text:          #f0f0f0;
+  --text-300:      #d4d4d4;
+  --text-400:      #a3a3a3;
+  --text-500:      #737373;
+  --muted:         #888888;
+
+  /* ── Accent / peach ── */
+  --accent:        #f4856a;          /* primary CTA, "Enter Workspace" */
+  --accent-light:  #e8b4a8;         /* .workspace-card-footer hover */
+  --accent-dim:    rgba(244,133,106,0.10);
+  --accent-hover:  #f9a08b;
+
+  /* ── Semantic ── */
+  --green:         #4ade80;
+  --green-dim:     rgba(74,222,128,0.12);
+  --red:           #f87171;
+  --red-dim:       rgba(248,113,113,0.10);
+
+  /* ── Shadows ── */
+  --shadow-glow-sm: 0 0 20px rgba(244,133,106,0.12), 0 4px 24px rgba(0,0,0,0.4);
+  --shadow-card:    0 12px 40px rgba(0,0,0,0.4);
+
+  /* ── Radii ── */
+  --radius:        10px;
+  --radius-lg:     14px;
+  --radius-xl:     18px;
+
+  /* ─────────────────────────────────────────
+     Legacy aliases — map old workspace-CSS
+     variable names to our tokens so nothing
+     breaks if they appear in other files.
+  ───────────────────────────────────────── */
+  --color-black:      var(--bg);
+  --color-white:      var(--text);
+  --color-card:       var(--card-bg);
+  --color-border:     var(--border);
+  --color-gray-300:   var(--text-300);
+  --color-gray-400:   var(--text-400);
+  --color-gray-500:   var(--text-500);
+  --color-peach-300:  var(--accent-light);
+}
+
+/* ─────────────────────────────────────────────────────────
+   3. BASE
+───────────────────────────────────────────────────────── */
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'DM Sans', sans-serif;
+  min-height: 100vh;
+}
+
+/* ─────────────────────────────────────────────────────────
+   4. NAVBAR  (top-level app nav, shared across all pages)
+───────────────────────────────────────────────────────── */
+.navbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 48px;
+  height: 64px;                       /* matches .workspace-nav 4rem */
+  border-bottom: 1px solid var(--border-soft);
+  background: rgba(10,10,10,0.5);
+  backdrop-filter: blur(12px);
+  position: sticky;
+  top: 0;
+  z-index: 50;                        /* matches workspace-nav z-index */
+}
+
+.logo {
+  font-family: 'Syne', sans-serif;
+  font-weight: 800;
+  font-size: 1.15rem;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+/* Workspace nav aliases (in case the workspace page uses these class names) */
+.workspace-nav-content  { display: flex; align-items: center; justify-content: space-between; height: 4rem; }
+.workspace-logo         { display: flex; align-items: center; gap: 0.5rem; }
+.workspace-user         { display: flex; align-items: center; gap: 1rem; }
+
+/* Avatar — used both as .avatar and .user-avatar */
+.avatar,
+.user-avatar {
+  width: 34px; height: 34px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent), #e05a7d);
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+.avatar:hover,
+.user-avatar:hover {
+  transform: scale(1.08);
+  box-shadow: 0 0 0 3px rgba(244,133,106,0.25);
+}
+
+/* ─────────────────────────────────────────────────────────
+   5. PAGE SHELL
+───────────────────────────────────────────────────────── */
+.page {
+  padding: 56px 48px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+/* Workspace-specific shell aliases */
+.workspace-main {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 3rem 1.5rem;
+}
+
+.page-header,
+.workspace-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 2rem;
+}
+
+.page-header h1,
+.workspace-title {
+  font-family: 'Syne', sans-serif;
+  font-size: 1.875rem;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 1.1;
+  color: var(--text);
+  margin-bottom: 0.5rem;
+}
+
+/* Override for the bigger hero heading on the workspaces list page */
+.page-header h1 { font-size: 2.4rem; }
+
+.subtitle,
+.workspace-subtitle {
+  color: var(--text-400);
+  font-size: 0.9rem;
+  font-weight: 300;
+}
+
+.header-actions { display: flex; gap: 12px; align-items: center; padding-top: 6px; }
+
+/* ─────────────────────────────────────────────────────────
+   6. BUTTONS
+───────────────────────────────────────────────────────── */
+.btn-outline {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 10px 20px;
+  background: transparent;
+  border: 1.5px solid var(--border-focus);
+  color: var(--text);
+  border-radius: var(--radius);
+  font-family: 'DM Sans', sans-serif; font-size: 0.875rem; font-weight: 500;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+}
+.btn-outline:hover { border-color: var(--muted); background: var(--surface); }
+
+.btn-primary {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 10px 22px;
+  background: var(--accent);
+  color: #1a0a00;
+  border: none;
+  border-radius: var(--radius);
+  font-family: 'DM Sans', sans-serif; font-size: 0.875rem; font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.15s, opacity 0.2s;
+  position: relative;
+}
+.btn-primary:hover  { background: var(--accent-hover); transform: translateY(-1px); }
+.btn-primary:active { transform: translateY(0); }
+.btn-primary:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+
+.btn-cancel {
+  padding: 10px 22px;
+  background: transparent; border: none;
+  color: var(--muted);
+  font-family: 'DM Sans', sans-serif; font-size: 0.875rem; font-weight: 500;
+  cursor: pointer;
+  border-radius: var(--radius);
+  transition: color 0.2s, background 0.2s;
+}
+.btn-cancel:hover { color: var(--text); background: var(--surface2); }
+
+.btn--flex1 { flex: 1; }
+
+/* ─────────────────────────────────────────────────────────
+   7. WORKSPACE GRID
+   Both .workspace-grid (from original workspace CSS) and
+   the JS-rendered grid use the same rules.
+───────────────────────────────────────────────────────── */
+.workspace-grid {
+  display: grid;
+  gap: 1.5rem;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+}
+
+@media (min-width: 768px)  { .workspace-grid { grid-template-columns: repeat(2,1fr); } }
+@media (min-width: 1024px) { .workspace-grid { grid-template-columns: repeat(3,1fr); } }
+
+/* ─────────────────────────────────────────────────────────
+   8. WORKSPACE CARDS
+   .ws-card  = JS-rendered cards (workspaces list page)
+   .workspace-card = same card, alternate class name
+   Both share identical visual rules via shared tokens.
+───────────────────────────────────────────────────────── */
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.ws-card,
+.workspace-card {
+  padding: 1.5rem;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  display: flex; flex-direction: column; gap: 12px;
+  transition: border-color 0.3s ease, transform 0.3s ease, box-shadow 0.3s ease;
+  opacity: 0;
+  transform: translateY(20px);
+  animation: fadeInUp 0.5s ease forwards;
+}
+.ws-card:hover,
+.workspace-card:hover {
+  border-color: rgba(232,180,168,0.3);
+  box-shadow: var(--shadow-glow-sm);
+  transform: translateY(-3px);
+}
+
+/* stagger delays */
+.ws-card:nth-child(1), .workspace-card:nth-child(1) { animation-delay: 0.05s; }
+.ws-card:nth-child(2), .workspace-card:nth-child(2) { animation-delay: 0.10s; }
+.ws-card:nth-child(3), .workspace-card:nth-child(3) { animation-delay: 0.15s; }
+.ws-card:nth-child(4), .workspace-card:nth-child(4) { animation-delay: 0.20s; }
+
+/* Card header row */
+.card-top,
+.workspace-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 0.25rem;
+}
+
+/* Badge container to hold multiple badges on the right side of cards */
+.badge-group {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+/* Icon box */
+.ws-icon,
+.workspace-icon {
+  width: 3rem; height: 3rem;
+  border-radius: 0.5rem;
+  background: linear-gradient(135deg, #1f2937, #000);
+  border: 1px solid rgba(255,255,255,0.10);
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'Syne', sans-serif; font-weight: 700;
+  font-size: 1.1rem; color: var(--text);
+}
+
+/* constrain workspace images to icon box */
+.ws-icon img,
+.workspace-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 0.5rem;
+  display: block;
+}
+
+/* Role / status badge */
+.role-badge,
+.workspace-badge {
+  padding: 0.25rem 0.6rem;
+  border-radius: 0.35rem;
+  font-size: 0.72rem; font-weight: 500;
+  background: rgba(255,255,255,0.05);
+  color: var(--text-400);
+  border: 1px solid rgba(255,255,255,0.05);
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
+/* Card title */
+.ws-name,
+.workspace-card-title {
+  font-family: 'Syne', sans-serif;
+  font-size: 1.15rem; font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+/* Card description */
+.ws-desc,
+.workspace-card-description {
+  font-size: 0.875rem;
+  color: var(--text-400);
+  line-height: 1.5; font-weight: 300;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Meta row (members / channels) */
+.ws-meta,
+.workspace-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  font-size: 0.875rem;
+  color: var(--text-500);
+}
+.workspace-card-meta svg { width: 14px; height: 14px; }
+
+.meta-item { display: flex; align-items: center; gap: 5px; }
+
+/* "Enter Workspace" footer link */
+.ws-enter,
+.workspace-card-footer {
+  display: inline-flex; align-items: center; gap: 5px;
+  color: var(--accent-light);
+  font-size: 0.875rem; font-weight: 500;
+  background: none; border: none; cursor: pointer; padding: 0;
+  font-family: 'DM Sans', sans-serif;
+  transition: gap 0.3s ease, transform 0.3s ease;
+}
+.ws-enter:hover              { gap: 8px; }
+.ws-card:hover .workspace-card-footer { transform: translateX(4px); }
+
+/* ─────────────────────────────────────────────────────────
+   9. CREATE-NEW CARD
+───────────────────────────────────────────────────────── */
+.ws-card.create-card,
+.workspace-create-card {
+  border: 2px dashed rgba(255,255,255,0.15);
+  background: transparent;
+  align-items: center; justify-content: center;
+  min-height: 200px; gap: 1rem;
+  color: var(--text-400);
+  flex-direction: column;
+  cursor: pointer;
+  /* override card animation opacity so it fades in too */
+  opacity: 0;
+  animation: fadeInUp 0.5s ease forwards;
+}
+.ws-card.create-card:hover,
+.workspace-create-card:hover {
+  border-color: rgba(232,180,168,0.5);
+  background: rgba(255,255,255,0.03);
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-card);
+}
+
+.create-icon,
+.workspace-create-icon {
+  width: 3rem; height: 3rem;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.05);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--text-400);
+  transition: color 0.3s ease, transform 0.3s ease, background 0.3s ease;
+}
+.ws-card.create-card:hover .create-icon,
+.workspace-create-card:hover .workspace-create-icon {
+  color: var(--accent-light);
+  background: rgba(244,133,106,0.12);
+  transform: scale(1.1);
+}
+
+.workspace-create-title {
+  font-size: 1.125rem; font-weight: 500;
+  color: var(--text-300);
+  transition: color 0.3s ease;
+}
+.workspace-create-card:hover .workspace-create-title { color: var(--text); }
+
+/* ─────────────────────────────────────────────────────────
+   10. WORKSPACE BODY / LAYOUT (chat & task views)
+───────────────────────────────────────────────────────── */
+.workspace-body   { overflow: hidden; }
+.workspace-layout { display: flex; height: 100vh; background: var(--bg); }
+
+/* ─────────────────────────────────────────────────────────
+   11. OVERLAY + MODAL BASE
+───────────────────────────────────────────────────────── */
+.overlay {
+  display: none;
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.72);
+  backdrop-filter: blur(7px);
+  z-index: 100;
+  align-items: center; justify-content: center;
+  padding: 24px;
+}
+.overlay.visible { display: flex; animation: fadeIn 0.2s ease; }
+
+@keyframes fadeIn  { from{opacity:0}              to{opacity:1}           }
+@keyframes slideUp {
+  from { opacity:0; transform: translateY(28px) scale(0.97); }
+  to   { opacity:1; transform: translateY(0)    scale(1);    }
+}
+
+.modal {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  padding: 36px 40px;
+  width: 100%; max-width: 620px;
+  max-height: 90vh; overflow-y: auto;
+  animation: slideUp 0.28s cubic-bezier(0.16,1,0.3,1);
+}
+.modal--narrow { max-width: 460px; }
+
+
+/* ─────────────────────────────────────────────
+   PROFILE MODAL
+───────────────────────────────────────────── */
+
+.profile-av-wrap {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-bottom: 20px;
+}
+
+.profile-av {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent), #e05a7d);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Syne', sans-serif;
+  font-weight: 700;
+  font-size: 1.6rem;
+  color: #fff;
+  overflow: hidden;
+  box-shadow: 0 4px 18px rgba(0,0,0,0.4);
+  flex-shrink: 0;
+}
+
+.profile-av img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+}
+
+.workspace-img-preview,
+#profileAvatarPreview .profile-av,
+#workspaceEditImagePreview {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent), #e05a7d);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Syne', sans-serif;
+  font-weight: 700;
+  font-size: 1.4rem;
+  color: #fff;
+  overflow: hidden;
+  box-shadow: 0 4px 18px rgba(0,0,0,0.35);
+  margin-top: 10px;
+}
+
+.workspace-img-preview img,
+#workspaceEditImagePreview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+}
+
+/* File Upload Styling */
+.profile-upload input[type="file"] {
+  font-size: 0.75rem;
+  color: var(--text-400);
+}
+
+/* Bio textarea polish */
+textarea {
+  resize: none;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px;
+  color: var(--text);
+  font-family: 'DM Sans', sans-serif;
+}
+
+/* ─────────────────────────────────────────────
+   STATUS BUTTONS
+───────────────────────────────────────────── */
+
+.status-opts {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.status-opt {
+  padding: 7px 14px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-400);
+  font-size: 0.78rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+/* Hover */
+.status-opt:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+/* Active state */
+.status-opt.active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(224,90,125,0.2);
+}
+
+/* Individual status colors */
+.status-opt[data-status="online"].active {
+  background: #22c55e;
+  border-color: #22c55e;
+}
+
+.status-opt[data-status="away"].active {
+  background: #facc15;
+  border-color: #facc15;
+  color: #000;
+}
+
+.status-opt[data-status="busy"].active {
+  background: #ef4444;
+  border-color: #ef4444;
+}
+
+.status-opt[data-status="offline"].active {
+  background: #64748b;
+  border-color: #64748b;
+}
+
+/* ─────────────────────────────────────────────
+   PROFILE SIGN OUT
+───────────────────────────────────────────── */
+
+.profile-divider {
+  margin: 22px 0 16px;
+  height: 1px;
+  background: var(--border);
+  opacity: 0.6;
+}
+
+.signout-wrap {
+  text-align: center;
+}
+
+.btn-signout {
+  display: inline-block;
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #ef4444;
+  font-weight: 600;
+  font-size: 0.85rem;
+  text-decoration: none;
+  transition: all 0.2s ease;
+}
+
+/* Hover */
+.btn-signout:hover {
+  background: #ef4444;
+  color: #fff;
+  border-color: #ef4444;
+  box-shadow: 0 6px 18px rgba(239, 68, 68, 0.35);
+  transform: translateY(-1px);
+} 
+
+
+/* ---------------------------------------------------------------- */
+
+/* task modal pieces (future use) */
+.priority-opts { display: flex; gap: 8px; }
+.priority-opt {
+  flex: 1;
+  padding: 7px;
+  border-radius: 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text-400);
+  font-family: 'DM Sans',sans-serif;
+  font-size: .78rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all .15s;
+  text-align: center;
+}
+.priority-opt[data-p="low"].active   { border-color: var(--green); color: var(--green); background: var(--green-dim); }
+.priority-opt[data-p="medium"].active{ border-color: #facc15; color: #facc15; background: rgba(250,204,21,.1); }
+.priority-opt[data-p="high"].active  { border-color: var(--red); color: var(--red); background: var(--red-dim); }
+
+/* ─────────────────────────────────────────────────
+   SCROLLBARS
+───────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: #444; }
+
+.back-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: none; border: none;
+  color: var(--muted); font-family: 'DM Sans', sans-serif; font-size: 0.8rem;
+  cursor: pointer; margin-bottom: 20px; padding: 0;
+  transition: color 0.2s;
+}
+.back-btn:hover { color: var(--text); }
+
+.modal h2 {
+  font-family: 'Syne', sans-serif;
+  font-size: 1.8rem; font-weight: 800; letter-spacing: -0.04em;
+  margin-bottom: 6px;
+}
+.modal--narrow h2 { font-size: 1.4rem; }
+
+.modal-subtitle { color: var(--muted); font-size: 0.85rem; margin-bottom: 24px; }
+
+/* ─────────────────────────────────────────────────────────
+   12. FORM CARD (inside modals)
+───────────────────────────────────────────────────────── */
+.form-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 28px;
+  display: flex; flex-direction: column; gap: 0;
+}
+
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 18px; }
+
+.form-group { display: flex; flex-direction: column; gap: 7px; }
+.form-group + .form-group { margin-top: 18px; }
+.form-group label { font-size: 0.8rem; font-weight: 500; letter-spacing: 0.01em; }
+
+.optional   { color: var(--muted); font-weight: 300; }
+.field-hint { font-size: 0.75rem; color: var(--muted); margin-top: -3px; }
+
+.field-error {
+  font-size: 0.75rem; color: var(--red);
+  min-height: 14px; display: block;
+  opacity: 0; transform: translateY(-4px);
+  transition: opacity 0.2s, transform 0.2s;
+}
+.field-error.visible { opacity: 1; transform: translateY(0); }
+
+/* ─────────────────────────────────────────────────────────
+   13. INPUTS & TEXTAREAS
+───────────────────────────────────────────────────────── */
+.input-wrapper   { position: relative; }
+.textarea-wrapper{ position: relative; }
+
+.input-icon {
+  position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
+  color: var(--muted); pointer-events: none;
+}
+.textarea-wrapper .input-icon { top: 13px; transform: none; }
+
+input, textarea {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-family: 'DM Sans', sans-serif; font-size: 0.85rem;
+  padding: 10px 12px 10px 34px;
+  outline: none; resize: vertical;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+input::placeholder, textarea::placeholder { color: var(--muted); font-weight: 300; }
+input:focus, textarea:focus {
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 3px var(--accent-dim);
+}
+input.input-error {
+  border-color: var(--red) !important;
+  box-shadow: 0 0 0 3px var(--red-dim);
+}
+
+/* ─────────────────────────────────────────────────────────
+   14. PERMISSION CARDS  (Create Workspace modal)
+───────────────────────────────────────────────────────── */
+.permission-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 12px; }
+
+.perm-card {
+  position: relative;
+  background: var(--bg); border: 1.5px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 14px; cursor: pointer;
+  display: flex; flex-direction: column; gap: 6px;
+  transition: border-color 0.2s, background 0.2s;
+}
+.perm-card strong { font-size: 0.85rem; font-weight: 600; }
+.perm-card span   { font-size: 0.72rem; color: var(--muted); line-height: 1.4; font-weight: 300; }
+.perm-card svg    { margin-bottom: 4px; color: var(--muted); }
+.perm-card:hover:not(.disabled) { border-color: var(--accent); }
+.perm-card.active { border-color: var(--accent); background: var(--accent-dim); }
+.perm-card.active svg { color: var(--accent); }
+.perm-card.disabled { opacity: 0.42; cursor: not-allowed; }
+
+.soon-badge {
+  position: absolute; top: 10px; right: 10px;
+  font-size: 0.6rem; font-weight: 700; letter-spacing: 0.07em;
+  background: #2a2a2a; color: #ccc;
+  padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border);
+}
+
+/* ─────────────────────────────────────────────────────────
+   15. MODAL ACTIONS ROW
+───────────────────────────────────────────────────────── */
+.modal-actions {
+  display: flex; justify-content: flex-end; align-items: center; gap: 10px;
+  margin-top: 24px;
+}
+
+/* ─────────────────────────────────────────────────────────
+   16. JOIN WORKSPACE MODAL
+───────────────────────────────────────────────────────── */
+.join-header {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  margin-bottom: 20px; gap: 12px;
+}
+.join-header .modal-subtitle { margin-bottom: 0; }
+
+.icon-close {
+  flex-shrink: 0;
+  width: 34px; height: 34px; border-radius: 8px;
+  background: none; border: none;
+  color: var(--muted); cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.2s, color 0.2s;
+}
+.icon-close:hover { background: var(--surface2); color: var(--text); }
+
+.alert-error {
+  display: none;
+  align-items: center; gap: 10px;
+  padding: 12px 14px;
+  background: var(--red-dim);
+  border: 1px solid rgba(248,113,113,0.25);
+  border-radius: var(--radius);
+  color: var(--red); font-size: 0.82rem;
+  margin-top: 14px;
+  animation: fadeIn 0.2s ease;
+}
+.alert-error.visible { display: flex; }
+.alert-error svg { flex-shrink: 0; }
+
+/* Spinner */
+.spinner {
+  display: none;
+  width: 15px; height: 15px;
+  border: 2px solid rgba(26,10,0,0.3);
+  border-top-color: #1a0a00;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+.spinner.visible { display: block; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Join success state */
+#joinSuccessView         { display: none; animation: fadeIn 0.25s ease; }
+#joinSuccessView.visible { display: block; }
+#joinFormView.hidden     { display: none; }
+
+.join-success {
+  display: flex; flex-direction: column; align-items: center;
+  text-align: center; padding: 12px 0 4px; gap: 10px;
+}
+
+.success-ring {
+  width: 64px; height: 64px; border-radius: 50%;
+  background: var(--green-dim);
+  border: 2px solid rgba(74,222,128,0.35);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--green); margin-bottom: 8px;
+  animation: popIn 0.4s cubic-bezier(0.16,1,0.3,1);
+}
+@keyframes popIn {
+  from { transform: scale(0.4); opacity: 0; }
+  to   { transform: scale(1);   opacity: 1; }
+}
+.join-success h3 {
+  font-family: 'Syne', sans-serif;
+  font-size: 1.15rem; font-weight: 700;
+}
+.join-success .modal-subtitle { margin-bottom: 0; }
+.join-success .accent { color: var(--accent); font-weight: 500; }
+
+/* ─────────────────────────────────────────────────────────
+   17. SCROLLBAR
+───────────────────────────────────────────────────────── */
+::-webkit-scrollbar       { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: #444; }
+
+/* ─────────────────────────────────────────────────────────
+   18. RESPONSIVE
+───────────────────────────────────────────────────────── */
+@media (max-width: 640px) {
+  .navbar          { padding: 0 20px; }
+  .page            { padding: 32px 20px; }
+  .page-header,
+  .workspace-header { flex-direction: column; gap: 20px; align-items: flex-start; }
+  .header-actions  { flex-wrap: wrap; }
+  .form-row        { grid-template-columns: 1fr; }
+  .permission-grid { grid-template-columns: 1fr; }
+  .modal           { padding: 24px 20px; }
+  .modal-actions   { flex-direction: column-reverse; }
+  .btn--flex1      { width: 100%; }
+  .workspace-grid  { grid-template-columns: 1fr !important; }
+}

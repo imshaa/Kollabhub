@@ -1,0 +1,200 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Verify Email — KollabHub</title>
+  <link rel="stylesheet" href="{% static 'css/main.css' %}" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <!-- <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet" /> -->
+  <link rel="stylesheet" href="{% static 'css/auth.css' %}" />
+</head>
+
+<body class="auth-page">
+
+  <div class="kh-bg">
+    <div class="kh-grid"></div>
+    <div class="kh-orb kh-orb-1"></div>
+    <div class="kh-orb kh-orb-2"></div>
+  </div>
+
+  <div class="kh-wrap animate-in">
+
+    <a href="{% url 'signup' %}" class="kh-back">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="m12 5-7 7 7 7"/></svg>
+      Back
+    </a>
+
+    <div class="kh-header">
+      <div class="kh-logo kh-logo-verify">✓</div>
+      <h1 class="kh-title">Check your inbox</h1>
+      <p class="kh-sub">We sent a 6-digit code to<br><strong class="kh-email-highlight">{{ email }}</strong></p>
+    </div>
+
+    <div class="kh-card">
+
+      {% if error %}
+      <div class="kh-alert kh-alert-error" id="serverError">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        {{ error }}
+      </div>
+      {% endif %}
+
+      <!-- Info banner -->
+      <div class="kh-info-banner">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+        Code expires in <strong>10 minutes</strong>. Check spam if you don't see it.
+      </div>
+
+      <form method="POST" id="otpForm">
+        {% csrf_token %}
+
+        <div class="kh-field">
+          <label class="kh-label" style="text-align:center;display:block;">Enter verification code</label>
+          <!-- Hidden input that holds the joined OTP value -->
+          <input type="hidden" name="otp" id="otpHidden" />
+
+          <div class="kh-otp-grid" id="otpGrid">
+            <input class="kh-otp-cell" type="text" inputmode="numeric" maxlength="1" data-idx="0" autocomplete="one-time-code" />
+            <input class="kh-otp-cell" type="text" inputmode="numeric" maxlength="1" data-idx="1" />
+            <input class="kh-otp-cell" type="text" inputmode="numeric" maxlength="1" data-idx="2" />
+            <input class="kh-otp-cell" type="text" inputmode="numeric" maxlength="1" data-idx="3" />
+            <input class="kh-otp-cell" type="text" inputmode="numeric" maxlength="1" data-idx="4" />
+            <input class="kh-otp-cell" type="text" inputmode="numeric" maxlength="1" data-idx="5" />
+          </div>
+        </div>
+
+        <button type="submit" class="kh-btn" id="verifyBtn" disabled>
+          <span class="kh-btn-text">Verify Email</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+        </button>
+      </form>
+
+      <div class="kh-resend" id="resendWrap">
+        <span>Didn't receive it?</span>
+        <button type="button" class="kh-link" id="resendSignupBtn">Resend code</button>
+        <span id="resendTimer" style="display:none;font-size:12px;color:var(--kh-text-faint);">
+          Resend in <strong id="resendCountdown">60</strong>s
+        </span>
+      </div>
+      <div id="resendMsg" style="margin-top:10px;"></div>
+
+    </div>
+  </div>
+
+  <script>
+  (function () {
+    const cells      = Array.from(document.querySelectorAll('.kh-otp-cell'));
+    const hiddenInput = document.getElementById('otpHidden');
+    const verifyBtn  = document.getElementById('verifyBtn');
+
+    function syncHidden() {
+      hiddenInput.value = cells.map(c => c.value).join('');
+      verifyBtn.disabled = hiddenInput.value.length !== 6;
+    }
+
+    cells.forEach((cell, idx) => {
+      cell.addEventListener('input', e => {
+        // Strip non-digits
+        cell.value = cell.value.replace(/\D/g, '').slice(-1);
+        cell.classList.toggle('filled', cell.value !== '');
+        if (cell.value && idx < 5) cells[idx + 1].focus();
+        syncHidden();
+      });
+
+      cell.addEventListener('keydown', e => {
+        if (e.key === 'Backspace' && !cell.value && idx > 0) {
+          cells[idx - 1].value = '';
+          cells[idx - 1].classList.remove('filled');
+          cells[idx - 1].focus();
+          syncHidden();
+        }
+        if (e.key === 'ArrowLeft'  && idx > 0) cells[idx - 1].focus();
+        if (e.key === 'ArrowRight' && idx < 5) cells[idx + 1].focus();
+      });
+
+      // Handle paste across all 6 cells
+      cell.addEventListener('paste', e => {
+        e.preventDefault();
+        const digits = (e.clipboardData || window.clipboardData)
+          .getData('text').replace(/\D/g, '').slice(0, 6);
+        digits.split('').forEach((d, i) => {
+          if (cells[i]) { cells[i].value = d; cells[i].classList.add('filled'); }
+        });
+        syncHidden();
+        // Focus the cell after last pasted digit
+        const next = Math.min(digits.length, 5);
+        cells[next].focus();
+      });
+    });
+
+    // Auto-focus first cell
+    cells[0].focus();
+
+    // ── Resend OTP via AJAX ──────────────────────────────────────
+    const resendBtn       = document.getElementById('resendSignupBtn');
+    const resendTimer     = document.getElementById('resendTimer');
+    const resendCountdown = document.getElementById('resendCountdown');
+    const resendMsg       = document.getElementById('resendMsg');
+
+    function startCooldown(seconds) {
+      resendBtn.style.display   = 'none';
+      resendTimer.style.display = 'inline';
+      let remaining = seconds;
+      resendCountdown.textContent = remaining;
+      const interval = setInterval(() => {
+        remaining--;
+        resendCountdown.textContent = remaining;
+        if (remaining <= 0) {
+          clearInterval(interval);
+          resendTimer.style.display = 'none';
+          resendBtn.style.display   = 'inline';
+        }
+      }, 1000);
+    }
+
+    resendBtn.addEventListener('click', async () => {
+      resendBtn.disabled = true;
+      resendMsg.innerHTML = '';
+      try {
+        const res  = await fetch('/otp/resend/', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.cookie.split('; ')
+              .find(r => r.startsWith('csrftoken='))?.split('=')[1] || '',
+          },
+          body: JSON.stringify({ email: '{{ email }}', purpose: 'signup' }),
+        });
+        const data = await res.json();
+        if (data.ok) {
+          resendMsg.innerHTML = '<div class="kh-alert kh-alert-success" style="margin-top:0;">New code sent — check your inbox.</div>';
+          startCooldown(60);
+        } else {
+          resendMsg.innerHTML = `<div class="kh-alert kh-alert-error" style="margin-top:0;">${data.error}</div>`;
+          resendBtn.disabled = false;
+        }
+      } catch {
+        resendMsg.innerHTML = '<div class="kh-alert kh-alert-error" style="margin-top:0;">Network error. Please try again.</div>';
+        resendBtn.disabled = false;
+      }
+    });
+
+    // Start initial cooldown (code was just sent)
+    startCooldown(60);
+
+    // Auto-dismiss server error
+    const serverError = document.getElementById('serverError');
+    if (serverError) {
+      setTimeout(() => {
+        serverError.style.opacity = '0';
+        serverError.style.transform = 'translateY(-8px)';
+        setTimeout(() => serverError.remove(), 400);
+      }, 6000);
+    }
+  })();
+  </script>
+
+</body>
+</html>

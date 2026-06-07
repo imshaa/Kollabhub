@@ -5,15 +5,14 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>{% block title %}KollabHub{% endblock %}</title>
+  <link rel="stylesheet" href="{% static 'css/base_layout.css' %}"/>
   <link rel="stylesheet" href="{% static 'css/chat.css' %}"/>
-  <link rel="stylesheet" href="{% static 'css/ai.css' %}"/>
   {% block extra_css %}{% endblock %}
 </head>
 <body>
 <div class="ws-layout">
-
+      <!-- SideBar -->
   <aside class="sidebar" id="sidebar">
-    
     <div class="sidebar-top">
       <div class="ws-selector-wrap">
         <button type="button" class="ws-selector">
@@ -34,10 +33,11 @@
     </div>
 
     <nav class="sidebar-nav">
-      <a href="{% url 'workspace' %}" class="nav-item {% block nav_workspaces %}{% endblock %}" id="workspaceNavBtn">
+      <a href="{% url 'profile' %}" class="nav-item" id="backToWorkspacesBtn">
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
         Workspaces
       </a>
+
       {% if workspace %}
       <a href="{% url 'chatui' workspace.id %}" class="nav-item {% block nav_chat %}{% endblock %}" id="chatNavBtn">
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
@@ -52,15 +52,16 @@
         Tasks
         <span class="badge nav-badge" id="taskNavBadge" style="display:none;"></span>
       </a>
-      <a href="{% url 'profile' %}?workspace_id={{ workspace.id }}" class="nav-item {% block nav_settings %}{% endblock %}" id="settingsNavBtn">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93A10 10 0 1 0 4.93 19.07 10 10 0 0 0 19.07 4.93z"/></svg>
-        Settings
-      </a>
-      <a href="{% url 'ai_page' workspace.id %}" class="nav-item {% block nav_ai %}{% endblock %}" id="aiNavBtn">
+      <a href="#" class="nav-item {% block nav_ai %}{% endblock %}" id="aiNavBtn">
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>
-        AI Chat
+        Kollab AI
       </a>
       {% endif %}
+      
+      <button class="nav-item {% block nav_settings %}{% endblock %}" data-view="settings" id="settingsNavBtn">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93A10 10 0 1 0 4.93 19.07 10 10 0 0 0 19.07 4.93z"/></svg>
+        Settings
+      </button>
     </nav>
 
     <div class="sidebar-section">
@@ -71,7 +72,10 @@
       <div id="channelList"></div>
       <div id="addChannelInputWrap" style="display:none;margin-top:8px;">
         <input type="text" id="addChannelInput" class="chat-input" placeholder="Enter channel name..." style="width:90%;font-size:.95em;" />
-        <button class="btn-accent-sm" id="confirmAddChannelBtn" style="margin-left:4px;">Add</button>
+        <div class="channel-actions-row" style="margin-top: 6px; display: flex; gap: 4px; padding-left: 2px;">
+          <button class="btn-accent-sm" id="confirmAddChannelBtn">Add</button>
+          <button class="btn-cancel-sm" id="cancelAddChannelBtn">Cancel</button>
+        </div>
       </div>
     </div>
 
@@ -90,7 +94,7 @@
     </div>
 
     <div class="sidebar-footer">
-      <a href="{% url 'profile' %}?workspace_id={{ workspace.id }}" class="user-info" id="openProfileBtn" style="text-decoration:none; color:inherit;">
+      <div class="user-info" id="openProfileBtn">
         <div class="user-avatar-wrap">
           {% if request.user.profile_picture %}
             <img src="{{ request.user.profile_picture_url }}" alt="{{ request.user.display_name|default:request.user.username }}" class="user-av" style="width:30px;height:30px;border-radius:50%;object-fit:cover;" />
@@ -101,11 +105,11 @@
         </div>
         <div class="user-meta">
           <span class="user-name">{{ request.user.display_name|default:request.user.username }}</span>
-          <span class="user-status-text">Settings &amp; Profile</span>
+          <span class="user-status-text">Edit Profile</span>
         </div>
-      </a>
-      <a href="{% url 'logout' %}" class="icon-btn" title="Sign Out" id="sidebarLogoutBtn">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+      </div>
+      <a href="{% url 'logout' %}" class="icon-btn" title="Sign Out" id="sidebarLogoutBtn" style="display: inline-flex; align-items: center; justify-content: center; color: inherit; text-decoration: none;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
       </a>
     </div>
   </aside>
@@ -114,59 +118,152 @@
     {% block main_content %}{% endblock %}
   </div>
 
-  <!-- Floating AI Assistant -->
-  <div class="ai-overlay" id="aiOverlay"></div>
   <button class="ai-fab" id="aiFab" title="Kollab AI">
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-      <path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z" />
-    </svg>
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>
   </button>
+
   <div class="ai-panel" id="aiPanel">
     <div class="ai-panel-header">
       <div class="ai-header-info">
         <div class="ai-avatar">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M12 8V4H8" /><rect width="16" height="12" x="4" y="8" rx="2" /><path d="M2 14h2" /><path d="M20 14h2" /><path d="M15 13v2" /><path d="M9 13v2" />
-          </svg>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg>
         </div>
         <div>
           <p class="ai-name">Kollab AI</p>
           <p class="ai-tagline">Always here to help</p>
         </div>
       </div>
-      <div class="ai-header-actions">
-        <button class="icon-btn" id="aiExpand" title="Toggle Size">
-          <svg class="expand-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
-          </svg>
-        </button>
-        <button class="icon-btn" id="aiClose">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-          </svg>
-        </button>
-      </div>
+      <button class="icon-btn" id="aiClose">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
     </div>
     <div class="ai-messages" id="aiMessages">
       <div class="ai-msg ai">
-        <div class="ai-msg-bubble">Hi! How can I help you optimize your workflow?</div>
+        <div class="ai-msg-bubble">Hi! I can help you summarize meetings, suggest tasks, or optimize your workflow. What do you need?</div>
       </div>
     </div>
     <div class="ai-input-wrap">
-      <input type="text" id="aiInput" class="ai-input" placeholder="Ask Kollab AI anything…" />
+      <input type="text" id="aiInput" class="ai-input" placeholder="Ask Kollab AI anything…"/>
       <button class="ai-send" id="aiSend">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-          <path d="m22 2-7 20-4-9-9-4Z" /><path d="M22 2 11 13" />
-        </svg>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>
       </button>
     </div>
   </div>
 
 </div>
 
+{% if workspace %}
+<div class="overlay" id="workspaceEditOverlay">
+  <div class="modal modal--narrow" role="dialog" aria-modal="true">
+    <form id="workspaceEditForm" method="POST" action="{% url 'update_workspace_info' workspace.id %}" enctype="multipart/form-data">
+      {% csrf_token %}
+      <div class="join-header">
+        <div>
+          <h2>Edit Workspace</h2>
+          <p class="modal-subtitle">Update workspace name or image instantly.</p>
+        </div>
+        <button type="button" class="icon-close" id="workspaceEditCloseBtn">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="form-card">
+        <div class="profile-av-wrap">
+          {% if workspace.image %}
+            <img id="workspaceEditImagePreview" class="profile-av" src="{{ workspace.image_url }}" alt="Workspace Image Preview" />
+          {% else %}
+            <div id="workspaceEditImagePreview" class="profile-av">{{ workspace.title|default:"W"|slice:":1" }}</div>
+          {% endif %}
+          <label for="workspaceEditImage" style="cursor:pointer;color:var(--accent);font-size:0.8rem;font-weight:500;">Change Image</label>
+          <input type="file" id="workspaceEditImage" name="fileUpload" accept="image/*" style="display:none;">
+        </div>
+        <div class="form-group">
+          <label for="workspaceEditName">Workspace Name</label>
+          <div class="input-wrapper">
+            <input type="text" id="workspaceEditName" name="title" value="{{ workspace.title }}" required>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="workspaceEditDisplayName">Display Name</label>
+          <div class="input-wrapper">
+            <input type="text" id="workspaceEditDisplayName" name="display_name" value="{{ workspace.display_name }}">
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn-cancel" id="workspaceEditCancelBtn">Cancel</button>
+          <button type="submit" class="btn-primary">Save Workspace</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}
+
+<div class="overlay" id="profileOverlay">
+  <div class="modal modal--narrow" role="dialog" aria-modal="true">
+    <form method="POST" action="{% url 'update_profile' %}" enctype="multipart/form-data">
+      {% csrf_token %}
+      <div class="join-header">
+        <div>
+          <h2>Edit Profile</h2>
+          <p class="modal-subtitle">Update your personal details</p>
+        </div>
+        <button type="button" class="icon-close" id="profileCloseBtn">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="form-card">
+        <div class="profile-av-wrap" id="profileAvatarPreview">
+          {% if user.profile_picture %}
+            <img id="profileAvatarImage" src="{{ user.profile_picture_url }}" class="profile-av" alt="Profile Picture" />
+          {% else %}
+            <div id="profileAvatarImage" class="profile-av">{{ user.username|first|upper }}</div>
+          {% endif %}
+          <label for="profileAvatarInput" style="cursor:pointer;color:var(--accent);font-size:0.8rem;font-weight:500;">Change Avatar</label>
+          <input type="file" id="profileAvatarInput" name="fileUpload" accept="image/*" style="display:none;">
+        </div>
+        <div class="form-group">
+          <label for="profileUsername">Username</label>
+          <div class="input-wrapper">
+            <input type="text" id="profileUsername" name="username" value="{{ user.username }}" required>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="profileName">Display Name</label>
+          <div class="input-wrapper">
+            <input type="text" id="profileName" name="displayName" value="{{ user.display_name }}" required>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Email</label>
+          <div class="input-wrapper">
+            <input type="email" value="{{ user.email }}" readonly>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="bioTextarea">Bio</label>
+          <textarea id="bioTextarea" name="bio" maxlength="225" placeholder="Tell us about yourself...">{{ user.bio }}</textarea>
+        </div>
+        <div class="form-group">
+          <label>Status</label>
+          <div class="status-opts">
+            <button type="button" class="status-opt {% if user.status == 'online' %}active{% endif %}" data-status="online"><span class="status-dot online"></span>Online</button>
+            <button type="button" class="status-opt {% if user.status == 'away' %}active{% endif %}" data-status="away"><span class="status-dot away"></span>Away</button>
+            <button type="button" class="status-opt {% if user.status == 'busy' %}active{% endif %}" data-status="busy"><span class="status-dot busy"></span>Busy</button>
+            <button type="button" class="status-opt {% if user.status == 'offline' %}active{% endif %}" data-status="offline"><span class="status-dot offline"></span>Offline</button>
+          </div>
+          <input type="hidden" name="status" id="statusInput" value="{{ user.status }}">
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn-cancel" id="profileCancelBtn">Cancel</button>
+          <button type="submit" class="btn-primary">Save Profile</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
 {% block page_modals %}{% endblock %}
 
-<!-- Inline data block: Django renders these as plain JSON before the browser sees any JS -->
 <script id="__layoutData__" type="application/json">
 {
   "workspaceId": {% if workspace %}{{ workspace.id }}{% else %}null{% endif %},
@@ -175,282 +272,7 @@
 }
 </script>
 
-<script>
-/* ── Read layout data from JSON blob (no Django tags inside JS = no linter errors) ── */
-(function () {
-  var _d = {};
-  try { _d = JSON.parse(document.getElementById('__layoutData__').textContent); } catch(e) {}
-  window.currentWorkspaceId          = _d.workspaceId  || null;
-  window.currentUserId               = _d.userId        || null;
-  window.INITIAL_NOTIFICATION_COUNTS = _d.notificationCounts || null;
-})();
-
-/* AI Module loaded via ai.js */
-
-/* ── Channel List ──────────────────────────────────────────────────────────── */
-(function () {
-  var list    = document.getElementById('channelList');
-  var wrap    = document.getElementById('addChannelInputWrap');
-  var input   = document.getElementById('addChannelInput');
-  var addBtn  = document.getElementById('addChannelBtn');
-  var confBtn = document.getElementById('confirmAddChannelBtn');
-
-  function wsId() { return window.currentWorkspaceId || 'default'; }
-
-  function render() {
-    if (!list) return;
-    var stored = [];
-    try { stored = JSON.parse(localStorage.getItem('ch_' + wsId()) || '[]'); } catch(e){}
-    var names = stored.length ? stored : ['general','announcements','random'];
-    list.innerHTML = '';
-    names.forEach(function(name, i){
-      var btn = document.createElement('button');
-      btn.className = 'nav-item' + (i === 0 ? ' active' : '');
-      btn.style.paddingLeft = '10px';
-      btn.innerHTML = '<span style="opacity:.4">#</span> ' + name;
-      btn.addEventListener('click', function(){
-        list.querySelectorAll('.nav-item').forEach(function(b){ b.classList.remove('active'); });
-        btn.classList.add('active');
-        var t = document.getElementById('chatChannelTitle');
-        if (t) t.textContent = name;
-        var inp = document.getElementById('chatInput');
-        if (inp) inp.placeholder = 'Message #' + name;
-      });
-      list.appendChild(btn);
-    });
-  }
-
-  function addChannel() {
-    var name = input && input.value && input.value.trim().toLowerCase().replace(/\s+/g,'-');
-    if (!name) return;
-    var key    = 'ch_' + wsId();
-    var stored = [];
-    try { stored = JSON.parse(localStorage.getItem(key) || '[]'); } catch(e){}
-    if (!stored.includes(name)) { stored.push(name); localStorage.setItem(key, JSON.stringify(stored)); }
-    if (input) input.value = '';
-    if (wrap)  wrap.style.display = 'none';
-    render();
-  }
-
-  if (addBtn)  addBtn.addEventListener('click', function(){ if (wrap) wrap.style.display = wrap.style.display === 'none' ? 'block' : 'none'; if (input) input.focus(); });
-  if (confBtn) confBtn.addEventListener('click', addChannel);
-  if (input)   input.addEventListener('keydown', function(e){ if (e.key === 'Enter') addChannel(); });
-  render();
-})();
-
-/* ══════════════════════════════════════════════════════════════════════════════
-   NOTIFICATION MANAGER
-   - Receives counts from Django on page load (no extra API call needed)
-   - Updates badges in real-time via WebSocket events
-   - Clears badges instantly when user clicks on Chat / Tasks / DM
-   - Syncs cleared state with backend silently in background
-══════════════════════════════════════════════════════════════════════════════ */
-window.NotificationManager = (function () {
-
-  var state = { chat: 0, taskboard: 0, dm: {} };
-  var wsId  = null;
-
-  /* ── helpers ── */
-  function getCSRF() {
-    var c = document.cookie.split(';').find(function(x){ return x.trim().startsWith('csrftoken='); });
-    return c ? c.split('=')[1].trim() : '';
-  }
-
-  function setBadge(el, count) {
-    if (!el) return;
-    if (count > 0) {
-      el.textContent = count > 99 ? '99+' : String(count);
-      el.style.display = 'inline-flex';
-    } else {
-      el.textContent = '';
-      el.style.display = 'none';
-    }
-  }
-
-  function renderAll() {
-    setBadge(document.getElementById('chatNavBadge'),  state.chat);
-    setBadge(document.getElementById('taskNavBadge'),  state.taskboard);
-    Object.keys(state.dm).forEach(function(uid){
-      setBadge(document.querySelector('.dm-badge[data-dm-user-id="' + uid + '"]'), state.dm[uid]);
-    });
-    /* also clear badges for users no longer in dm state */
-    document.querySelectorAll('.dm-badge').forEach(function(el){
-      var uid = el.dataset.dmUserId;
-      if (!state.dm[uid]) setBadge(el, 0);
-    });
-  }
-
-  /* Silently tell backend a section was read (fire-and-forget) */
-  function syncRead(section, extraPayload) {
-    if (!wsId) return;
-    var payload = Object.assign({ section: section }, extraPayload || {});
-    fetch('/api/workspace/' + wsId + '/notifications/mark-read/', {
-      method: 'POST',
-      credentials: 'same-origin',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Requested-With': 'XMLHttpRequest',
-        'X-CSRFToken': getCSRF(),
-      },
-      body: JSON.stringify(payload),
-    }).catch(function(e){ console.warn('mark-read failed', e); });
-  }
-
-  /* ── public API ── */
-  return {
-
-    init: function() {
-      wsId = window.currentWorkspaceId || null;
-      if (!wsId) return;
-
-      /* Seed from Django-injected counts so we show badges immediately */
-      var initial = window.INITIAL_NOTIFICATION_COUNTS || null;
-      if (initial) {
-        state.chat      = Number(initial.chat      || 0);
-        state.taskboard = Number(initial.taskboard || 0);
-        state.dm        = {};
-        if (initial.dm_counts) {
-          Object.keys(initial.dm_counts).forEach(function(k){
-            state.dm[String(k)] = Number(initial.dm_counts[k]) || 0;
-          });
-        }
-        renderAll();
-      } else {
-        /* Page didn't inject counts — fetch them once */
-        fetch('/api/workspace/' + wsId + '/notifications/counts/', { credentials: 'same-origin' })
-          .then(function(r){ return r.json(); })
-          .then(function(data){
-            state.chat      = Number(data.chat      || 0);
-            state.taskboard = Number(data.taskboard || 0);
-            state.dm        = {};
-            if (data.dm_counts) {
-              Object.keys(data.dm_counts).forEach(function(k){
-                state.dm[String(k)] = Number(data.dm_counts[k]) || 0;
-              });
-            }
-            renderAll();
-          })
-          .catch(function(e){ console.warn('notification counts load failed', e); });
-      }
-
-      /* ── Nav click listeners — clear badge immediately on click ── */
-      var chatBtn = document.getElementById('chatNavBtn');
-      var taskBtn = document.getElementById('taskNavBtn');
-
-      if (chatBtn) {
-        chatBtn.addEventListener('click', function(){
-          if (state.chat > 0) {
-            state.chat = 0;
-            renderAll();
-            syncRead('chat');
-          }
-        });
-      }
-
-      if (taskBtn) {
-        taskBtn.addEventListener('click', function(){
-          if (state.taskboard > 0) {
-            state.taskboard = 0;
-            renderAll();
-            syncRead('taskboard');
-          }
-        });
-      }
-
-      /* DM items — clear that specific user's badge when clicked */
-      document.querySelectorAll('.dm-item').forEach(function(btn){
-        btn.addEventListener('click', function(){
-          var uid = String(btn.dataset.dmUserId);
-          if (state.dm[uid] && state.dm[uid] > 0) {
-            state.dm[uid] = 0;
-            renderAll();
-            syncRead('dm', { other_user_id: parseInt(uid, 10) });
-          }
-        });
-      });
-
-      /* Also clear chat badge if user is already on chat page */
-      if (window.location.pathname.includes('/chatui/')) {
-        if (state.chat > 0) { state.chat = 0; renderAll(); syncRead('chat'); }
-      }
-      /* Also clear task badge if user is already on taskboard page */
-      if (window.location.pathname.includes('/taskboard/')) {
-        if (state.taskboard > 0) { state.taskboard = 0; renderAll(); syncRead('taskboard'); }
-      }
-    },
-
-    /* Called by WebSocket consumers in real time */
-    handleNotificationEvent: function(data) {
-      if (!data || !data.notification) return;
-      var section  = data.notification_section;
-      var actorId  = Number(data.notification_actor_id);
-      var myId     = Number(window.currentUserId);
-      var path     = window.location.pathname;
-
-      if (section === 'chat') {
-        /* Don't badge sender's own messages */
-        if (actorId === myId) return;
-        /* Don't badge if already viewing group chat (no DM open) */
-        if (path.includes('/chatui/') && !window.currentDMUser) return;
-        state.chat = (state.chat || 0) + 1;
-        renderAll();
-        return;
-      }
-
-      if (section === 'taskboard') {
-        /* Don't badge if already on the taskboard */
-        if (path.includes('/taskboard/')) return;
-        state.taskboard = (state.taskboard || 0) + 1;
-        renderAll();
-        return;
-      }
-
-      if (section === 'dm') {
-        var targetId = Number(data.notification_target_user_id);
-        /* Only badge if I am the recipient */
-        if (myId !== targetId) return;
-        var senderId = String(actorId);
-        /* Don't badge if already in that DM conversation */
-        if (path.includes('/chatui/') && window.currentDMUser === actorId) return;
-        state.dm[senderId] = (state.dm[senderId] || 0) + 1;
-        renderAll();
-        return;
-      }
-    },
-
-    /* Explicit clear — called by chatui.js and taskboard.js when section is viewed */
-    markRead: function(section, options) {
-      options = options || {};
-      if (section === 'chat') {
-        if (state.chat === 0) return;
-        state.chat = 0; renderAll(); syncRead('chat');
-      } else if (section === 'taskboard') {
-        if (state.taskboard === 0) return;
-        state.taskboard = 0; renderAll(); syncRead('taskboard');
-      } else if (section === 'dm') {
-        var uid = String(options.other_user_id || '');
-        if (!uid || !state.dm[uid]) return;
-        state.dm[uid] = 0; renderAll(); syncRead('dm', { other_user_id: parseInt(uid, 10) });
-      }
-    },
-
-    /* Called by chatui.js when a DM is opened */
-    clearDM: function(userId) {
-      this.markRead('dm', { other_user_id: userId });
-    },
-  };
-
-})();
-
-
-
-/* ── Boot NotificationManager after DOM is ready ───────────────────────────── */
-document.addEventListener('DOMContentLoaded', function(){
-  window.NotificationManager.init();
-});
-</script>
-
-<script src="{% static 'js/ai.js' %}"></script>
+<script src="{% static 'js/base_layout.js' %}"></script>
 {% block extra_js %}{% endblock %}
 </body>
 </html>
