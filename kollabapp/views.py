@@ -3358,22 +3358,6 @@ def ai_chat_legacy(request):
     return JsonResponse({'error': 'Workspace ID required for legacy AI endpoint.'}, status=400)
 
 
-# @login_required
-# @require_POST
-# def ai_chat(request):
-#     try:
-#         payload = json.loads(request.body.decode("utf-8") or "{}")
-#     except ValueError:
-#         return JsonResponse({"error": "Invalid JSON."}, status=400)
-
-#     message = (payload.get("message") or "").strip()
-#     if not message:
-#         return JsonResponse({"error": "Message is required."}, status=400)
-
-#     response_text = get_response(message)
-#     return JsonResponse({"response": response_text})
-
-
 def ai(request, workspace_id):
     # 1. Verify the workspace exists
     workspace = get_object_or_404(Workspace, id=workspace_id)
