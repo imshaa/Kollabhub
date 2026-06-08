@@ -8,11 +8,16 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 load_dotenv(BASE_DIR / ".env")
 
+
 def get_env_var(name: str, default=None, required=False):
     value = os.environ.get(name, default)
     if required and value in (None, ""):
         raise ImproperlyConfigured(f"Set the {name} environment variable.")
     return value
+
+CSRF_TRUSTED_ORIGINS = [
+    "https://web-production-aa3f.up.railway.app"
+]
 
 SECRET_KEY = get_env_var("SECRET_KEY", required=True)
 
