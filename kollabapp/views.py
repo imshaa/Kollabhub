@@ -9,12 +9,11 @@ from django.template.loader import render_to_string
 from django.utils.html import strip_tags
 from django.core.mail import EmailMultiAlternatives
 import logging
-import threading
 import requests as http_requests
 import uuid
+from .tasks import send_otp_email_task
 from datetime import timedelta        # stdlib — NOT django
 from django.utils import timezone
-from django.conf import settings
 from pathlib import Path
 import uuid as _uuid
 from kollabapp.ai_assistant import get_response
@@ -105,8 +104,8 @@ def _otp_request_too_frequent(email, purpose, cooldown_seconds=60):
     ).exists()
  
  
-def send_otp_email(subject, template_name, context, recipient_email):
-    html_content  = render_to_string(f"emails/{template_name}", context)
+def _send_otp_email_sync(subject, template_name, context, recipient_email):
+    html_content = render_to_string(f"emails/{template_name}", context)
     plain_content = strip_tags(html_content)
     msg = EmailMultiAlternatives(
         subject=subject,
@@ -115,21 +114,18 @@ def send_otp_email(subject, template_name, context, recipient_email):
         to=[recipient_email],
     )
     msg.attach_alternative(html_content, "text/html")
+    msg.send(fail_silently=False)
 
-    if settings.EMAIL_BACKEND == "django.core.mail.backends.console.EmailBackend":
-        logger.warning(
-            "Console email backend active. OTP emails are printed to the console and will not arrive in an inbox: %s",
+
+def send_otp_email(subject, template_name, context, recipient_email):
+    try:
+        send_otp_email_task.delay(subject, template_name, context, recipient_email)
+    except Exception:
+        logger.exception(
+            "Celery task failed, sending OTP email synchronously for %s",
             recipient_email,
         )
-
-    def _send_message(m):
-        try:
-            m.send(fail_silently=False)
-        except Exception:
-            logger.exception("Failed to send OTP email to %s", recipient_email)
-
-    # Send email in background to avoid blocking the request/redirect flow.
-    threading.Thread(target=_send_message, args=(msg,), daemon=True).start()
+        _send_otp_email_sync(subject, template_name, context, recipient_email)
  
  
 def validate_password_strength(password):

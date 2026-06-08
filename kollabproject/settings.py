@@ -83,14 +83,38 @@ import os
 ASGI_APPLICATION = 'kollabproject.asgi.application'
 # Redis setup for production - 
 
-CHANNEL_LAYERS = {
-    "default": {
-        "BACKEND": "channels_redis.core.RedisChannelLayer",
-        "CONFIG": {
-            "hosts": [os.environ.get("REDIS_URL")],
-        },
-    },
-}
+# CHANNEL_LAYERS = {
+#     "default": {
+#         "BACKEND": "channels_redis.core.RedisChannelLayer",
+#         "CONFIG": {
+#             "hosts": [os.environ.get("REDIS_URL")],
+#         },
+#     },
+# }
+
+#  For production
+REDIS_URL = os.environ.get("REDIS_URL")
+
+CELERY_BROKER_URL = REDIS_URL
+CELERY_RESULT_BACKEND = REDIS_URL
+
+#  For developement.
+# CELERY_BROKER_URL = get_env_var(
+#     "CELERY_BROKER_URL",
+#     get_env_var("REDIS_URL", "redis://127.0.0.1:6379/0")
+# )
+# -----------
+CELERY_RESULT_BACKEND = get_env_var(
+    "CELERY_RESULT_BACKEND",
+    CELERY_BROKER_URL
+)
+CELERY_ACCEPT_CONTENT = ["json"]
+CELERY_TASK_SERIALIZER = "json"
+CELERY_RESULT_SERIALIZER = "json"
+CELERY_TIMEZONE = "UTC"
+CELERY_ENABLE_UTC = True
+CELERY_TASK_ALWAYS_EAGER = DEBUG
+CELERY_TASK_EAGER_PROPAGATES = True
 
 #  Redis setup for local development - uncomment the code below and make sure Redis is running locally on port 6379
 # CHANNEL_LAYERS = {
