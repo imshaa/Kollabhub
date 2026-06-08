@@ -9,6 +9,7 @@ from django.template.loader import render_to_string
 from django.utils.html import strip_tags
 from django.core.mail import EmailMultiAlternatives
 import logging
+import threading
 import requests as http_requests
 import uuid
 from datetime import timedelta        # stdlib — NOT django
@@ -114,7 +115,15 @@ def send_otp_email(subject, template_name, context, recipient_email):
         to=[recipient_email],
     )
     msg.attach_alternative(html_content, "text/html")
-    msg.send(fail_silently=False)
+
+    def _send_message(m):
+        try:
+            m.send(fail_silently=False)
+        except Exception:
+            logger.exception("Failed to send OTP email to %s", recipient_email)
+
+    # Send email in background to avoid blocking the request/redirect flow.
+    threading.Thread(target=_send_message, args=(msg,), daemon=True).start()
  
  
 def validate_password_strength(password):
