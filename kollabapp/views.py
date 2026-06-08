@@ -116,6 +116,12 @@ def send_otp_email(subject, template_name, context, recipient_email):
     )
     msg.attach_alternative(html_content, "text/html")
 
+    if settings.EMAIL_BACKEND == "django.core.mail.backends.console.EmailBackend":
+        logger.warning(
+            "Console email backend active. OTP emails are printed to the console and will not arrive in an inbox: %s",
+            recipient_email,
+        )
+
     def _send_message(m):
         try:
             m.send(fail_silently=False)
