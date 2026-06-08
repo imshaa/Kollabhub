@@ -130,28 +130,21 @@ def _send_otp_email_sync(subject, template_name, context, recipient_email):
 # ═══════════════════════════════════════════════════════════════════
 #  EMAIL HELPER  (Fix 1 — sync fallback that actually fires)
 # ═══════════════════════════════════════════════════════════════════
-
 def send_otp_email(subject, template_name, context, recipient_email):
-   
 
-    if getattr(settings, "CELERY_TASK_ALWAYS_EAGER", False):
-        # Dev / eager mode: skip the broker entirely, send right now.
-        _send_otp_email_sync(subject, template_name, context, recipient_email)
-        return
+    from django.conf import settings
 
-    try:
-        send_otp_email_task.delay(subject, template_name, context, recipient_email)
-        logger.info("OTP email task queued for %s", recipient_email)
-    except Exception:
-        logger.exception(
-            "Celery broker unreachable — sending OTP email synchronously for %s",
-            recipient_email,
-        )
-        _send_otp_email_sync(subject, template_name, context, recipient_email)
+    # if getattr(settings, "CELERY_TASK_ALWAYS_EAGER", False):
+    #     # Dev mode — send inline, no broker involved
+    #     _send_otp_email_sync(subject, template_name, context, recipient_email)
+    #     return
 
-
- 
- 
+    # Production — queue only, no sync fallback
+    # If this raises, let the exception propagate so signup_view can
+    # return a clean error to the user rather than hanging on SMTP.
+    send_otp_email_task.delay(subject, template_name, context, recipient_email)
+    logger.info("OTP email task queued for %s", recipient_email)
+    
 def validate_password_strength(password):
     errors = []
     if len(password) < 8:
@@ -230,6 +223,7 @@ def verify_otp_code(email, otp_code, purpose):
 #  SIGNUP
 # ═══════════════════════════════════════════════════════════════════
 
+
 def signup_view(request):
     if request.user.is_authenticated:
         return redirect("workspace")
@@ -243,7 +237,6 @@ def signup_view(request):
         def err(msg):
             return render(request, "signup.html", {"error": msg, "email": email})
 
-        # ── Validation ──────────────────────────────────────────────
         if not email:
             return err("Email address is required.")
         if not re.match(r'^[^\s@]+@[^\s@]+\.[^\s@]+$', email):
@@ -261,35 +254,31 @@ def signup_view(request):
         if _otp_request_too_frequent(email, "signup"):
             return err("A verification code was sent recently. Please wait 60 seconds.")
 
-        # ── Create OTP record (fast DB write) ───────────────────────
         otp = create_otp(
             email=email,
             purpose="signup",
             temp_data={
                 "email":    email,
-                "password": make_password(password),  # hashed — never plaintext
+                "password": make_password(password),
                 "username": username,
             },
         )
 
-        # ── Queue / send email — non-blocking in production ─────────
-        # In production this returns as soon as the task is in Redis
-        # (microseconds). The Celery worker delivers the email
-        # asynchronously. If the broker is down, send_otp_email() falls
-        # back to a direct SMTP call (≤ 10 s), still before the redirect.
-        send_otp_email(
-            subject="Verify your KollabHub account",
-            template_name="verify_email.html",
-            context={
-                "otp":      otp.otp_code,
-                "username": username or email.split("@")[0],
-            },
-            recipient_email=email,
-        )
+        try:
+            send_otp_email(
+                subject="Verify your KollabHub account",
+                template_name="verify_email.html",
+                context={
+                    "otp":      otp.otp_code,
+                    "username": username or email.split("@")[0],
+                },
+                recipient_email=email,
+            )
+        except Exception:
+            logger.exception("Failed to queue OTP email for %s", email)
+            otp.delete()
+            return err("Could not send verification email. Please try again in a moment.")
 
-        # ── Redirect immediately ─────────────────────────────────────
-        # The browser reaches the OTP page in < 1 s. The email typically
-        # arrives within a few seconds of the worker processing the task.
         return redirect("signup_verify_otp", email=email)
 
     return render(request, "signup.html")
@@ -297,23 +286,24 @@ def signup_view(request):
 # def signup_view(request):
 #     if request.user.is_authenticated:
 #         return redirect("workspace")
- 
+
 #     if request.method == "POST":
 #         email            = request.POST.get("email", "").strip().lower()
 #         password         = request.POST.get("password", "")
 #         confirm_password = request.POST.get("confirm_password", "")
 #         username         = request.POST.get("username", "").strip()
- 
+
 #         def err(msg):
 #             return render(request, "signup.html", {"error": msg, "email": email})
- 
+
+#         # ── Validation ──────────────────────────────────────────────
 #         if not email:
 #             return err("Email address is required.")
 #         if not re.match(r'^[^\s@]+@[^\s@]+\.[^\s@]+$', email):
 #             return err("Please enter a valid email address.")
 #         if CustomUser.objects.filter(email=email).exists():
 #             return err("This email is already registered. Please sign in.")
- 
+
 #         pw_errors = validate_password_strength(password)
 #         if pw_errors:
 #             return err(pw_errors[0])
@@ -323,7 +313,8 @@ def signup_view(request):
 #             return err("That username is already taken.")
 #         if _otp_request_too_frequent(email, "signup"):
 #             return err("A verification code was sent recently. Please wait 60 seconds.")
- 
+
+#         # ── Create OTP record (fast DB write) ───────────────────────
 #         otp = create_otp(
 #             email=email,
 #             purpose="signup",
@@ -333,19 +324,30 @@ def signup_view(request):
 #                 "username": username,
 #             },
 #         )
- 
+
+#         # ── Queue / send email — non-blocking in production ─────────
+#         # In production this returns as soon as the task is in Redis
+#         # (microseconds). The Celery worker delivers the email
+#         # asynchronously. If the broker is down, send_otp_email() falls
+#         # back to a direct SMTP call (≤ 10 s), still before the redirect.
 #         send_otp_email(
 #             subject="Verify your KollabHub account",
 #             template_name="verify_email.html",
-#             context={"otp": otp.otp_code, "username": username or email.split("@")[0]},
+#             context={
+#                 "otp":      otp.otp_code,
+#                 "username": username or email.split("@")[0],
+#             },
 #             recipient_email=email,
 #         )
- 
+
+#         # ── Redirect immediately ─────────────────────────────────────
+#         # The browser reaches the OTP page in < 1 s. The email typically
+#         # arrives within a few seconds of the worker processing the task.
 #         return redirect("signup_verify_otp", email=email)
- 
+
 #     return render(request, "signup.html")
- 
- 
+
+
 def signup_verify_otp(request, email):
     if request.user.is_authenticated:
         return redirect("workspace")
