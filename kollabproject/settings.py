@@ -73,16 +73,31 @@ TEMPLATES = [
 # WSGI_APPLICATION = 'kollabproject.wsgi.application'
 ASGI_APPLICATION = 'kollabproject.asgi.application'
 
+import os
+
+ASGI_APPLICATION = 'kollabproject.asgi.application'
+# Redis setup for production - 
+
 CHANNEL_LAYERS = {
     "default": {
         "BACKEND": "channels_redis.core.RedisChannelLayer",
         "CONFIG": {
-            "hosts": [("127.0.0.1", 6379)],
-            "capacity": 1500,
-            "expiry": 10,
+            "hosts": [os.environ.get("REDIS_URL")],
         },
     },
 }
+
+#  Redis setup for local development - uncomment the code below and make sure Redis is running locally on port 6379
+# CHANNEL_LAYERS = {
+#     "default": {
+#         "BACKEND": "channels_redis.core.RedisChannelLayer",
+#         "CONFIG": {
+#             "hosts": [("127.0.0.1", 6379)],
+#             "capacity": 1500,
+#             "expiry": 10,
+#         },
+#     },
+# }
 
 #  -------------------- DB SQLITE -----------------
 
