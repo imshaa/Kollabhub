@@ -29,55 +29,7 @@ class CustomUser(AbstractUser):
     def profile_picture_url(self):
         return create_signed_url(self.profile_picture) if self.profile_picture else None
  
- 
-class OTPVerification(models.Model):
-    """
-    Secure OTP storage with:
-      - automatic expiry (10 minutes)
-      - attempt counting (max 5 wrong guesses)
-      - one active OTP per (email, purpose) pair
-      - password stored as a hashed token, never plaintext
-    """
-    PURPOSE_CHOICES = (
-        ("signup",          "Signup Verification"),
-        ("forgot_password", "Password Reset"),
-    )
- 
-    email      = models.EmailField(db_index=True)
-    otp_code   = models.CharField(max_length=6)
-    purpose    = models.CharField(max_length=20, choices=PURPOSE_CHOICES)
- 
-    # Temporary signup data — password is stored as Django's make_password hash,
-    # never as plaintext.
-    temp_data  = models.JSONField(default=dict, blank=True)
- 
-    is_verified    = models.BooleanField(default=False)
-    attempts       = models.PositiveSmallIntegerField(default=0)  # wrong-guess counter
-    created_at     = models.DateTimeField(auto_now_add=True)
-    expires_at     = models.DateTimeField()
- 
-    class Meta:
-        ordering = ["-created_at"]
-        indexes  = [models.Index(fields=["email", "purpose"])]
- 
-    def __str__(self):
-        return f"OTP({self.purpose}) for {self.email}"
- 
-    # ── convenience properties ──────────────────────────────────
- 
-    @property
-    def is_expired(self):
-        return timezone.now() > self.expires_at
- 
-    @property
-    def is_locked(self):
-        """Too many wrong attempts."""
-        return self.attempts >= 5
- 
-    @property
-    def is_usable(self):
-        return not self.is_verified and not self.is_expired and not self.is_locked
- 
+
 class Workspace(models.Model):
 
     VISIBILITY_CHOICES = (

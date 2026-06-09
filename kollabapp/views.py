@@ -7,18 +7,16 @@ from django.contrib.auth.decorators import login_required
 from django.conf import settings
 from django.template.loader import render_to_string
 from django.utils.html import strip_tags
-from django.core.mail import EmailMultiAlternatives
 import logging
 import requests as http_requests
 import uuid
-from .tasks import send_otp_email_task
-from datetime import timedelta        # stdlib — NOT django
+from datetime import timedelta
 from django.utils import timezone
 from pathlib import Path
 import uuid as _uuid
 from kollabapp.ai_assistant import get_response
 from .supabase_storage import build_storage_path, create_signed_url, delete_file, upload_file
-from .models import CustomUser, OTPVerification, WorkspaceCall
+from .models import CustomUser, WorkspaceCall
 from .models import Workspace
 from .models import WorkspaceMembership
 from .models import Message
@@ -32,6 +30,7 @@ from django.http import JsonResponse
 import json, re, random, string
 from django.db import models
 from django.db.models import Q, Count
+
 logger = logging.getLogger(__name__)
 
 from asgiref.sync import async_to_sync
@@ -39,8 +38,7 @@ from channels.layers import get_channel_layer
 from django.contrib.auth.hashers import make_password
 
 
-User = get_user_model()  # This gets CustomUser
-
+User = get_user_model()
 
 
 ALLOWED_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg"}
@@ -51,21 +49,17 @@ def _has_allowed_extension(filename, allowed_extensions):
     return Path(filename).suffix.lower() in allowed_extensions
 
 import mimetypes as _mimetypes
- 
-# -------------------- FOR CHAT PAGE FILE HANDLING --------------------- 
-# ── constants ──────────────────────────────────────────────────────────────────
+
+# -------------------- FOR CHAT PAGE FILE HANDLING ---------------------
 _IMAGE_MAX_BYTES    = 2  * 1024 * 1024   # 2 MB
 _OTHER_MAX_BYTES    = 25 * 1024 * 1024   # 25 MB
- 
+
 _IMAGE_MIME_PREFIXES = ('image/',)
 _VIDEO_MIME_PREFIXES = ('video/',)
- 
+
 _ALLOWED_MIME = {
-    # images
     'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml',
-    # video
     'video/mp4', 'video/quicktime', 'video/webm', 'video/x-msvideo',
-    # documents
     'application/pdf',
     'application/msword',
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -76,75 +70,25 @@ _ALLOWED_MIME = {
     'text/plain', 'text/csv',
     'application/zip', 'application/x-zip-compressed',
 }
- 
- 
+
+
 def _categorise(mime: str) -> str:
     if mime.startswith('image/'):
         return 'image'
     if mime.startswith('video/'):
         return 'video'
     return 'document'
- 
- 
+
+
 def _detect_mime(file_obj) -> str:
-    """Best-effort MIME detection from file name + Django content_type."""
     guessed, _ = _mimetypes.guess_type(file_obj.name or '')
     return file_obj.content_type or guessed or 'application/octet-stream'
-  
- 
-# ═══════════════════════════════════════════════════════════════════
-#  HELPERS
-# ═══════════════════════════════════════════════════════════════════
- 
-def _otp_request_too_frequent(email, purpose, cooldown_seconds=60):
-    """True if an OTP was already created within the cooldown window."""
-    cutoff = timezone.now() - timedelta(seconds=cooldown_seconds)
-    return OTPVerification.objects.filter(
-        email=email, purpose=purpose, created_at__gte=cutoff,
-    ).exists()
- 
- 
-def _send_otp_email_sync(subject, template_name, context, recipient_email):
-    html_content = render_to_string(f"emails/{template_name}", context)
-    plain_content = strip_tags(html_content)
-    msg = EmailMultiAlternatives(
-        subject=subject,
-        body=plain_content,
-        from_email=settings.DEFAULT_FROM_EMAIL,
-        to=[recipient_email],
-    )
-    msg.attach_alternative(html_content, "text/html")
-    msg.send(fail_silently=False)
 
-
-# def send_otp_email(subject, template_name, context, recipient_email):
-#     try:
-#         send_otp_email_task.delay(subject, template_name, context, recipient_email)
-#     except Exception:
-#         logger.exception(
-#             "Celery task failed, sending OTP email synchronously for %s",
-#             recipient_email,
-#         )
-#         _send_otp_email_sync(subject, template_name, context, recipient_email)
 
 # ═══════════════════════════════════════════════════════════════════
-#  EMAIL HELPER  (Fix 1 — sync fallback that actually fires)
+#  PASSWORD HELPERS
 # ═══════════════════════════════════════════════════════════════════
-def send_otp_email(subject, template_name, context, recipient_email):
 
-    from django.conf import settings
-
-    # if getattr(settings, "CELERY_TASK_ALWAYS_EAGER", False):
-    #     # Dev mode — send inline, no broker involved
-    #     _send_otp_email_sync(subject, template_name, context, recipient_email)
-    #     return
-
-    # Production — queue only, no sync fallback
-    # If this raises, let the exception propagate so signup_view can
-    # return a clean error to the user rather than hanging on SMTP.
-    send_otp_email_task.delay(subject, template_name, context, recipient_email)
-    logger.info("OTP email task queued for %s", recipient_email)
-    
 def validate_password_strength(password):
     errors = []
     if len(password) < 8:
@@ -158,136 +102,17 @@ def validate_password_strength(password):
     if not re.search(r'[!@#$%^&*()\-_=+\[\]{};:\'",.<>?/\\|`~]', password):
         errors.append("Must contain at least one special character.")
     return errors
- 
- 
-def _generate_otp_code():
-    return ''.join(random.choices(string.digits, k=6))
- 
- 
-def create_otp(email, purpose, temp_data=None):
-    """
-    Delete ALL previous OTPs for (email, purpose), then create one
-    that expires in 10 minutes.
-    """
-    OTPVerification.objects.filter(email=email, purpose=purpose).delete()
-    return OTPVerification.objects.create(
-        email=email,
-        otp_code=_generate_otp_code(),
-        purpose=purpose,
-        temp_data=temp_data or {},
-        expires_at=timezone.now() + timedelta(minutes=10),
-    )
- 
- 
-def verify_otp_code(email, otp_code, purpose):
-    """
-    Returns {"ok": True, "otp": <instance>}
-          | {"ok": False, "error": "<message>"}
-    """
-    try:
-        otp = OTPVerification.objects.get(
-            email=email, purpose=purpose, is_verified=False,
-        )
-    except OTPVerification.DoesNotExist:
-        return {"ok": False, "error": "No active code found. Please request a new one."}
-    except OTPVerification.MultipleObjectsReturned:
-        OTPVerification.objects.filter(
-            email=email, purpose=purpose, is_verified=False
-        ).delete()
-        return {"ok": False, "error": "Session error. Please request a new code."}
- 
-    if otp.is_expired:
-        otp.delete()
-        return {"ok": False, "error": "This code has expired. Please request a new one."}
- 
-    if otp.is_locked:
-        return {"ok": False, "error": "Too many incorrect attempts. Please request a new code."}
- 
-    if otp.otp_code != otp_code.strip():
-        otp.attempts += 1
-        otp.save(update_fields=["attempts"])
-        remaining = max(0, 5 - otp.attempts)
-        if remaining == 0:
-            return {"ok": False, "error": "Too many incorrect attempts. Please request a new code."}
-        return {
-            "ok": False,
-            "error": f"Incorrect code — {remaining} attempt{'s' if remaining != 1 else ''} remaining.",
-        }
- 
-    otp.is_verified = True
-    otp.save(update_fields=["is_verified"])
-    return {"ok": True, "otp": otp}
- 
- 
+
+
 # ═══════════════════════════════════════════════════════════════════
 #  SIGNUP
 # ═══════════════════════════════════════════════════════════════════
-
 
 def signup_view(request):
     if request.user.is_authenticated:
         return redirect("workspace")
 
     if request.method == "POST":
-        screen = request.POST.get("screen", "signup")
-        
-        # ─────────────────────────────────────────────────────────
-        #  HANDLE OTP VERIFICATION SUBMISSION
-        # ─────────────────────────────────────────────────────────
-        if screen == "verify_otp":
-            email    = request.POST.get("email", "").strip().lower()
-            otp_code = request.POST.get("otp", "").strip()
-
-            def otp_err(msg):
-                return render(request, "signup.html", {
-                    "error": msg,
-                    "email": email,
-                    "show_otp_screen": True
-                })
-
-            if not email:
-                return otp_err("Email is required.")
-            if not otp_code or not otp_code.isdigit() or len(otp_code) != 6:
-                return otp_err("Please enter the full 6-digit code.")
-
-            result = verify_otp_code(email, otp_code, "signup")
-            if not result["ok"]:
-                return otp_err(result["error"])
-
-            otp_obj = result["otp"]
-            temp    = otp_obj.temp_data
-
-            # Re-check in case email was registered between steps
-            if CustomUser.objects.filter(email=email).exists():
-                otp_obj.delete()
-                return otp_err("This email was registered while verifying. Please sign in.")
-
-            # Build unique username
-            base_username = temp.get("username") or email.split("@")[0]
-            username      = base_username
-            counter       = 1
-            while CustomUser.objects.filter(username=username).exists():
-                username = f"{base_username}{counter}"
-                counter += 1
-
-            # Create user — password already hashed
-            user          = CustomUser(username=username, email=temp["email"])
-            user.password = temp["password"]
-            user.save()
-
-            # Consume OTP
-            otp_obj.delete()
-
-            # Force-login
-            user.backend = "django.contrib.auth.backends.ModelBackend"
-            login(request, user)
-
-            messages.success(request, "Account created! Welcome to KollabHub.")
-            return redirect("workspace")
-
-        # ─────────────────────────────────────────────────────────
-        #  HANDLE INITIAL SIGNUP SUBMISSION
-        # ─────────────────────────────────────────────────────────
         email            = request.POST.get("email", "").strip().lower()
         password         = request.POST.get("password", "")
         confirm_password = request.POST.get("confirm_password", "")
@@ -310,39 +135,21 @@ def signup_view(request):
             return err("Passwords do not match.")
         if username and CustomUser.objects.filter(username=username).exists():
             return err("That username is already taken.")
-        if _otp_request_too_frequent(email, "signup"):
-            return err("A verification code was sent recently. Please wait 60 seconds.")
 
-        otp = create_otp(
-            email=email,
-            purpose="signup",
-            temp_data={
-                "email":    email,
-                "password": make_password(password),
-                "username": username,
-            },
-        )
+        # Build unique username if not provided
+        base_username = username or email.split("@")[0]
+        username      = base_username
+        counter       = 1
+        while CustomUser.objects.filter(username=username).exists():
+            username = f"{base_username}{counter}"
+            counter += 1
 
-        try:
-            send_otp_email(
-                subject="Verify your KollabHub account",
-                template_name="verify_email.html",
-                context={
-                    "otp":      otp.otp_code,
-                    "username": username or email.split("@")[0],
-                },
-                recipient_email=email,
-            )
-        except Exception:
-            logger.exception("Failed to queue OTP email for %s", email)
-            otp.delete()
-            return err("Could not send verification email. Please try again in a moment.")
+        user = CustomUser(username=username, email=email)
+        user.set_password(password)
+        user.save()
 
-        # Render the same template but show the OTP verification screen
-        return render(request, "signup.html", {
-            "email": email,
-            "show_otp_screen": True
-        })
+        messages.success(request, "Account created. Please sign in.")
+        return redirect("login")
 
     return render(request, "signup.html")
 
@@ -350,19 +157,19 @@ def signup_view(request):
 # ═══════════════════════════════════════════════════════════════════
 #  LOGIN
 # ═══════════════════════════════════════════════════════════════════
- 
+
 def login_view(request):
     if request.user.is_authenticated:
         return redirect("workspace")
- 
+
     if request.method == "POST":
         identifier = request.POST.get("email_or_username", "").strip()
         password   = request.POST.get("password", "")
- 
+
         if not identifier or not password:
             return render(request, "login.html",
                           {"error": "Email/username and password are both required."})
- 
+
         user = None
         if "@" in identifier:
             try:
@@ -372,217 +179,72 @@ def login_view(request):
                 pass
         else:
             user = authenticate(request, username=identifier, password=password)
- 
+
         if user:
             login(request, user)
             return redirect("workspace")
- 
+
         return render(request, "login.html",
                       {"error": "Invalid email/username or password."})
- 
+
     return render(request, "login.html")
- 
- 
+
+
 # ═══════════════════════════════════════════════════════════════════
-#  FORGOT PASSWORD
+#  FORGOT / RESET PASSWORD  (no email — user enters email + new pwd)
 # ═══════════════════════════════════════════════════════════════════
- 
+
 def forgot_password_view(request):
     if request.user.is_authenticated:
         return redirect("workspace")
- 
+
     is_ajax = request.headers.get("X-Requested-With") == "XMLHttpRequest"
- 
+
     if request.method == "POST":
-        email = request.POST.get("email", "").strip().lower()
- 
-        if not email:
-            if is_ajax:
-                return JsonResponse({"ok": False, "error": "Email is required."})
-            return render(request, "login.html", {"error": "Email is required."})
- 
-        if _otp_request_too_frequent(email, "forgot_password"):
-            msg = "A reset code was sent recently. Please wait 60 seconds."
-            if is_ajax:
-                return JsonResponse({"ok": False, "error": msg})
-            return render(request, "login.html", {"error": msg})
- 
-        # Send only if email exists — but always redirect (no info leak)
-        try:
-            user = CustomUser.objects.get(email=email)
-            otp  = create_otp(email=email, purpose="forgot_password")
-            send_otp_email(
-                subject="KollabHub — Password Reset Code",
-                template_name="reset_password.html",
-                context={
-                    "otp":      otp.otp_code,
-                    "username": user.display_name or user.username or email.split("@")[0],
-                },
-                recipient_email=email,
-            )
-        except CustomUser.DoesNotExist:
-            pass  # silent — no enumeration
- 
-        if is_ajax:
-            return JsonResponse({"ok": True})
-        return redirect("forgot_password_verify_otp", email=email)
- 
-    return render(request, "login.html")
- 
- 
-def forgot_password_verify_otp(request, email):
-    if request.user.is_authenticated:
-        return redirect("workspace")
- 
-    email = email.lower()
-    is_ajax = request.headers.get("X-Requested-With") == "XMLHttpRequest"
- 
-    if request.method == "POST":
-        otp_code = request.POST.get("otp", "").strip()
- 
-        def err(msg, status=400):
-            if is_ajax:
-                return JsonResponse({"ok": False, "error": msg}, status=status)
-            return render(request, "login.html",
-                          {"error": msg, "email": email, "screen": "forgot_otp"})
- 
-        if not otp_code or not otp_code.isdigit() or len(otp_code) != 6:
-            return err("Please enter the full 6-digit code.")
- 
-        result = verify_otp_code(email, otp_code, "forgot_password")
-        if not result["ok"]:
-            return err(result["error"])
- 
-        if is_ajax:
-            return JsonResponse({"ok": True})
-        return redirect("reset_password", email=email)
- 
-    return render(request, "login.html", {"email": email, "screen": "forgot_otp"})
- 
- 
-def reset_password_view(request, email):
-    if request.user.is_authenticated:
-        return redirect("workspace")
- 
-    email = email.lower()
-    is_ajax = request.headers.get("X-Requested-With") == "XMLHttpRequest"
- 
-    # Gate: verified OTP must exist and not be expired
-    try:
-        otp = OTPVerification.objects.get(
-            email=email, purpose="forgot_password", is_verified=True,
-        )
-    except OTPVerification.DoesNotExist:
-        if is_ajax:
-            return JsonResponse({"ok": False, "error": "Invalid or expired reset session. Please start over."}, status=400)
-        return render(request, "login.html",
-                      {"error": "Invalid or expired reset session. Please start over."})
- 
-    if otp.is_expired:
-        otp.delete()
-        if is_ajax:
-            return JsonResponse({"ok": False, "error": "Reset session expired. Please request a new code."}, status=400)
-        return render(request, "login.html",
-                      {"error": "Reset session expired. Please request a new code."})
- 
-    if request.method == "POST":
+        email            = request.POST.get("email", "").strip().lower()
         new_password     = request.POST.get("new_password", "")
         confirm_password = request.POST.get("confirm_password", "")
- 
+
         def err(msg, status=400):
             if is_ajax:
                 return JsonResponse({"ok": False, "error": msg}, status=status)
             return render(request, "login.html",
-                          {"error": msg, "email": email, "screen": "reset"})
- 
+                          {"error": msg, "screen": "reset"})
+
+        if not email:
+            return err("Email is required.")
         if not new_password:
             return err("New password is required.")
- 
+
         pw_errors = validate_password_strength(new_password)
         if pw_errors:
             return err(pw_errors[0])
         if new_password != confirm_password:
             return err("Passwords do not match.")
- 
+
         try:
             user = CustomUser.objects.get(email=email)
-            user.set_password(new_password)
-            user.save()
         except CustomUser.DoesNotExist:
-            return err("Account not found.")
- 
-        # Consume OTP — single use
-        otp.delete()
- 
+            return err("No account found with that email address.")
+
+        user.set_password(new_password)
+        user.save()
+
         if is_ajax:
             return JsonResponse({"ok": True})
- 
+
         messages.success(request, "Password reset successfully. Please sign in.")
         return redirect("login")
- 
-    return render(request, "login.html", {"email": email, "screen": "reset"})
- 
- 
-# ── Resend OTP (AJAX) ──────────────────────────────────────────────
- 
-@require_POST
-def resend_otp(request):
-    """AJAX: POST JSON { "email": "...", "purpose": "signup|forgot_password" }"""
-    try:
-        body    = json.loads(request.body)
-        email   = body.get("email", "").strip().lower()
-        purpose = body.get("purpose", "").strip()
-    except (json.JSONDecodeError, AttributeError):
-        return JsonResponse({"ok": False, "error": "Invalid request."})
- 
-    if not email or purpose not in ("signup", "forgot_password"):
-        return JsonResponse({"ok": False, "error": "Invalid request."})
- 
-    if _otp_request_too_frequent(email, purpose):
-        return JsonResponse({"ok": False,
-                             "error": "Please wait 60 seconds before requesting a new code."})
- 
-    if purpose == "signup":
-        try:
-            old = OTPVerification.objects.get(email=email, purpose="signup")
-            temp_data = old.temp_data
-        except OTPVerification.DoesNotExist:
-            return JsonResponse({"ok": False,
-                                 "error": "No pending signup found. Please start again."})
-        otp = create_otp(email=email, purpose="signup", temp_data=temp_data)
-        send_otp_email(
-            subject="Verify your KollabHub account",
-            template_name="verify_email.html",
-            context={
-                "otp":      otp.otp_code,
-                "username": temp_data.get("username") or email.split("@")[0],
-            },
-            recipient_email=email,
-        )
-    else:
-        try:
-            user = CustomUser.objects.get(email=email)
-        except CustomUser.DoesNotExist:
-            return JsonResponse({"ok": True})  # silent
-        otp = create_otp(email=email, purpose="forgot_password")
-        send_otp_email(
-            subject="KollabHub — Password Reset Code",
-            template_name="reset_password.html",
-            context={
-                "otp":      otp.otp_code,
-                "username": user.display_name or user.username or email.split("@")[0],
-            },
-            recipient_email=email,
-        )
- 
-    return JsonResponse({"ok": True})
- 
- 
+
+    return render(request, "login.html", {"screen": "reset"})
+
+
 # ── Logout ─────────────────────────────────────────────────────────
- 
+
 def logout_view(request):
     logout(request)
     return redirect("home")
+
  
 # -----------------------------Proile Logic -----------------------------------
 

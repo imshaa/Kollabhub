@@ -11,11 +11,6 @@ urlpatterns = [
     path('login/',                               views.login_view,                   name='login'),
     path('logout/',                              views.logout_view,                  name='logout'),
     path('forgot-password/',                     views.forgot_password_view,         name='forgot_password'),
-    path('forgot-password/verify-otp/<email>/',  views.forgot_password_verify_otp,   name='forgot_password_verify_otp'),
-    path('reset-password/<email>/',              views.reset_password_view,          name='reset_password'),
- 
-    # ── OTP resend (AJAX POST) ─────────────────────────────────────
-    path('otp/resend/',                          views.resend_otp,                   name='resend_otp'),
     
     # ── Chat page ─────────────────────────────────────
     path("chatui/<int:workspace_id>/", views.chatui, name="chatui"),
