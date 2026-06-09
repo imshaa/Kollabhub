@@ -192,22 +192,39 @@ AUTH_PASSWORD_VALIDATORS = [
 # ═══════════════════════════════════════════════════════════════════
 
 if os.environ.get("USE_REAL_EMAIL", "False").lower() in ("1", "true", "yes"):
-    # ── Gmail SMTP (production) ─────────────────────────────────────
     EMAIL_BACKEND       = "django.core.mail.backends.smtp.EmailBackend"
     EMAIL_HOST          = "smtp.gmail.com"
-    EMAIL_PORT          = 587
-    EMAIL_USE_TLS       = True
+    EMAIL_PORT          = 465          # SSL — Railway allows this, blocks 587
+    EMAIL_USE_TLS       = False        # TLS is for 587, not 465
+    EMAIL_USE_SSL       = True         # SSL is for 465
     EMAIL_HOST_USER     = os.environ.get("EMAIL_HOST_USER", "")
     EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "")
     DEFAULT_FROM_EMAIL  = (
         f"KollabHub <{os.environ.get('EMAIL_HOST_USER', 'noreply@kollabhub.com')}>"
     )
-    # Prevent Django from hanging if Gmail is slow
-    EMAIL_TIMEOUT = 10   # seconds
+    EMAIL_TIMEOUT = 10
 else:
-    # ── Console backend (development — OTP prints to terminal) ──────
     EMAIL_BACKEND      = "django.core.mail.backends.console.EmailBackend"
     DEFAULT_FROM_EMAIL = "KollabHub <noreply@kollabhub.com>"
+
+    
+# if os.environ.get("USE_REAL_EMAIL", "False").lower() in ("1", "true", "yes"):
+#     # ── Gmail SMTP (production) ─────────────────────────────────────
+#     EMAIL_BACKEND       = "django.core.mail.backends.smtp.EmailBackend"
+#     EMAIL_HOST          = "smtp.gmail.com"
+#     EMAIL_PORT          = 587
+#     EMAIL_USE_TLS       = True
+#     EMAIL_HOST_USER     = os.environ.get("EMAIL_HOST_USER", "")
+#     EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "")
+#     DEFAULT_FROM_EMAIL  = (
+#         f"KollabHub <{os.environ.get('EMAIL_HOST_USER', 'noreply@kollabhub.com')}>"
+#     )
+#     # Prevent Django from hanging if Gmail is slow
+#     EMAIL_TIMEOUT = 10   # seconds
+# else:
+#     # ── Console backend (development — OTP prints to terminal) ──────
+#     EMAIL_BACKEND      = "django.core.mail.backends.console.EmailBackend"
+#     DEFAULT_FROM_EMAIL = "KollabHub <noreply@kollabhub.com>"
 
 
 # ═══════════════════════════════════════════════════════════════════
