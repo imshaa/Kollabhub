@@ -229,6 +229,65 @@ def signup_view(request):
         return redirect("workspace")
 
     if request.method == "POST":
+        screen = request.POST.get("screen", "signup")
+        
+        # ─────────────────────────────────────────────────────────
+        #  HANDLE OTP VERIFICATION SUBMISSION
+        # ─────────────────────────────────────────────────────────
+        if screen == "verify_otp":
+            email    = request.POST.get("email", "").strip().lower()
+            otp_code = request.POST.get("otp", "").strip()
+
+            def otp_err(msg):
+                return render(request, "signup.html", {
+                    "error": msg,
+                    "email": email,
+                    "show_otp_screen": True
+                })
+
+            if not email:
+                return otp_err("Email is required.")
+            if not otp_code or not otp_code.isdigit() or len(otp_code) != 6:
+                return otp_err("Please enter the full 6-digit code.")
+
+            result = verify_otp_code(email, otp_code, "signup")
+            if not result["ok"]:
+                return otp_err(result["error"])
+
+            otp_obj = result["otp"]
+            temp    = otp_obj.temp_data
+
+            # Re-check in case email was registered between steps
+            if CustomUser.objects.filter(email=email).exists():
+                otp_obj.delete()
+                return otp_err("This email was registered while verifying. Please sign in.")
+
+            # Build unique username
+            base_username = temp.get("username") or email.split("@")[0]
+            username      = base_username
+            counter       = 1
+            while CustomUser.objects.filter(username=username).exists():
+                username = f"{base_username}{counter}"
+                counter += 1
+
+            # Create user — password already hashed
+            user          = CustomUser(username=username, email=temp["email"])
+            user.password = temp["password"]
+            user.save()
+
+            # Consume OTP
+            otp_obj.delete()
+
+            # Force-login
+            user.backend = "django.contrib.auth.backends.ModelBackend"
+            login(request, user)
+
+            messages.success(request, "Account created! Welcome to KollabHub.")
+            return redirect("workspace")
+
+        # ─────────────────────────────────────────────────────────
+        #  HANDLE INITIAL SIGNUP SUBMISSION
+        # ─────────────────────────────────────────────────────────
         email            = request.POST.get("email", "").strip().lower()
         password         = request.POST.get("password", "")
         confirm_password = request.POST.get("confirm_password", "")
@@ -279,7 +338,11 @@ def signup_view(request):
             otp.delete()
             return err("Could not send verification email. Please try again in a moment.")
 
-        return redirect("signup_verify_otp", email=email)
+        # Render the same template but show the OTP verification screen
+        return render(request, "signup.html", {
+            "email": email,
+            "show_otp_screen": True
+        })
 
     return render(request, "signup.html")
 
@@ -348,59 +411,6 @@ def signup_view(request):
 #     return render(request, "signup.html")
 
 
-def signup_verify_otp(request, email):
-    if request.user.is_authenticated:
-        return redirect("workspace")
- 
-    email = email.lower()
- 
-    if request.method == "POST":
-        otp_code = request.POST.get("otp", "").strip()
- 
-        def err(msg):
-            return render(request, "signup_verify_otp.html", {"error": msg, "email": email})
- 
-        if not otp_code or not otp_code.isdigit() or len(otp_code) != 6:
-            return err("Please enter the full 6-digit code.")
- 
-        result = verify_otp_code(email, otp_code, "signup")
-        if not result["ok"]:
-            return err(result["error"])
- 
-        otp_obj = result["otp"]
-        temp    = otp_obj.temp_data
- 
-        # Re-check in case email was registered between steps
-        if CustomUser.objects.filter(email=email).exists():
-            otp_obj.delete()
-            return err("This email was registered while verifying. Please sign in.")
- 
-        # Build unique username
-        base_username = temp.get("username") or email.split("@")[0]
-        username      = base_username
-        counter       = 1
-        while CustomUser.objects.filter(username=username).exists():
-            username = f"{base_username}{counter}"
-            counter += 1
- 
-        # Create user — password already hashed
-        user          = CustomUser(username=username, email=temp["email"])
-        user.password = temp["password"]
-        user.save()
- 
-        # Consume OTP
-        otp_obj.delete()
- 
-        # Force-login (no need to re-authenticate since we just created the account)
-        user.backend = "django.contrib.auth.backends.ModelBackend"
-        login(request, user)
- 
-        messages.success(request, "Account created! Welcome to KollabHub.")
-        return redirect("workspace")
- 
-    return render(request, "signup_verify_otp.html", {"email": email})
- 
- 
 # ═══════════════════════════════════════════════════════════════════
 #  LOGIN
 # ═══════════════════════════════════════════════════════════════════
