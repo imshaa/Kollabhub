@@ -1,6 +1,5 @@
 /* ---------- Config / DOM refs ---------- */
-// Get values from data attributes injected by Django template
-// new layout uses #messagesArea, but keep fallback for older id.
+
 const chatContainer = document.getElementById('messagesArea') || document.getElementById('chatWindow');
 const workspaceId = chatContainer?.dataset?.workspaceId || "";
 const currentUserId = parseInt(chatContainer?.dataset?.userId || "0", 10) || null;
@@ -117,6 +116,7 @@ function switchToWorkspaceChat() {
   });
 }
 
+
 // element references (new ids first, then old as fallback)
 const messageInput = document.getElementById("chatInput") || document.getElementById("messageInput");
 const sendButton = document.getElementById("sendBtn") || document.getElementById("sendButton");
@@ -146,7 +146,9 @@ async function loadWorkspaceHistory() {
         if (window._seenMessageIds.has(m.message_id)) return;
         window._seenMessageIds.add(m.message_id);
       }
+      // Use sender_id if available (more reliable), fallback to username comparison
       const isOwnMessage = senderId ? (senderId === currentUserId) : (m.sender_username === username);
+      // Voice Messages      
       if (m.voice_url) {
         appendVoiceNoteToWindow({
           sender:    sender,
@@ -205,12 +207,12 @@ if (chatSocket) {
     try {
       const data = JSON.parse(e.data);
       // deduplicate messages by id (protects against multiple connections)
-     
+      
       if (!window._seenMessageIds) window._seenMessageIds = new Set();
       const msgId = data.message_id || data.id || null;
       if (msgId && window._seenMessageIds.has(msgId)) return; // ignore duplicate
-
-      if (data.type === 'call_signal') { if (window.__handleCallSignal) window.__handleCallSignal(data); return; } 
+      // Call Signal
+            if (data.type === 'call_signal') { if (window.__handleCallSignal) window.__handleCallSignal(data); return; } 
 
       if (data.type === 'notification_event') {
         if (window.NotificationManager) {
@@ -227,10 +229,10 @@ if (chatSocket) {
       // If we're in a DM conversation
       if (currentDMUser) {
         // Only show messages that are DMs for THIS specific conversation
-        if (data.dm) {
-          const otherId = data.sender_id === currentUserId ? data.receiver_id : data.sender_id;
-          if (currentDMUser !== otherId) {
-            return; // This DM is for a different user, ignore
+      if (data.dm) {
+        const otherId = data.sender_id === currentUserId ? data.receiver_id : data.sender_id;
+        if (currentDMUser !== otherId) {
+          return; // This DM is for a different user, ignore
           }
           // Show this DM message
         } else {
@@ -256,7 +258,7 @@ if (chatSocket) {
         // Use sender_id if available (more reliable), fallback to username comparison
         const isOwnMessage = senderId ? (senderId === currentUserId) : (sender === username);
         appendMessageToWindow({ sender, avatar, text, side: isOwnMessage ? "right" : "left", time });
-      } else if (data.type === "voice_note") {
+              } else if (data.type === "voice_note") {
         // Voice notes need to be handled correctly
         const sender = data.sender_username || "Unknown";
         const avatar = data.sender_avatar || "/static/Areeba.jpeg";
@@ -295,7 +297,11 @@ if (chatSocket) {
       } else if (data.type === "typing" || data.type === "typing_indicator") {
         // Pass both username and sender_id for reliable identification
         showTyping(data.username || data.sender || data.sender_username, data.sender_id);
-      }
+      } 
+      // else {
+      //   // generic fallback: show raw payload
+      //   appendMessageToWindow({ sender: data.username || "server", avatar: "/static/Areeba.jpeg", text: JSON.stringify(data), side: "left" });
+      // }
     } catch (err) {
       console.error("Error parsing socket message:", err, e.data);
     }
@@ -469,14 +475,14 @@ async function loadDMHistory(userId){
         });
       }
       if (!m.voice_url && !(m.files && m.files.length)) {
-        appendMessageToWindow({
-          sender: m.sender,
-          text: m.message,
-          side: m.sender === username ? "right" : "left",
-          avatar: "/static/Areeba.jpeg",
-          time: new Date(m.created_at)
-        });
-      }
+      appendMessageToWindow({
+        sender: m.sender,
+        text: m.message,
+        side: m.sender === username ? "right" : "left",
+        avatar: "/static/Areeba.jpeg",
+        time: new Date(m.created_at)
+      });
+    }
 
     });
 
@@ -558,8 +564,15 @@ if (channelTitleEl) {
   channelTitleEl.style.cursor = 'pointer';
   channelTitleEl.addEventListener('click', () => {
     if (currentDMUser) {
-      // Smoothly transition to workspace chat
-      switchToWorkspaceChat();
+      leaveDM(currentDMUser);
+      currentDMUser = null;
+      lastDMUser = null;
+      channelTitleEl.innerText = 'general';
+      channelTitleEl.classList.remove('dm-header');
+      const chatSubtitle = document.querySelector('.view-subtitle');
+      if (chatSubtitle) chatSubtitle.innerText = 'Topic: Team announcements and general chatter';
+      loadWorkspaceHistory();
+      if (messageInput) messageInput.placeholder = 'Message #general';
     }
   });
 }
@@ -812,25 +825,38 @@ const addChannelBtn        = document.getElementById('addChannelBtn');
 const addChannelInputWrap  = document.getElementById('addChannelInputWrap');
 const addChannelInputEl    = document.getElementById('addChannelInput');
 const confirmAddChannelBtn = document.getElementById('confirmAddChannelBtn');
+const cancelAddChannelBtn  = document.getElementById('cancelAddChannelBtn');
  
 if (addChannelBtn && addChannelInputWrap && addChannelInputEl && confirmAddChannelBtn) {
-  addChannelBtn.addEventListener('click', () => {
-    addChannelInputWrap.style.display = 'flex';
+  const closeChannelAdd = () => {
+    addChannelInputWrap.style.display = 'none';
     addChannelInputEl.value = '';
-    addChannelInputEl.focus();
+  };
+  
+  addChannelBtn.addEventListener('click', () => {
+    if (addChannelInputWrap.style.display === 'none' || !addChannelInputWrap.style.display) {
+      addChannelInputWrap.style.display = 'flex';
+      addChannelInputEl.value = '';
+      addChannelInputEl.focus();
+    } else {
+      closeChannelAdd();
+    }
   });
+  
   const doAddChannel = () => {
     const name = addChannelInputEl.value.trim();
     if (!name || channels.includes(name)) return;
     channels.push(name);
     saveChannels();
     renderChannels();
-    addChannelInputWrap.style.display = 'none';
+    closeChannelAdd();
   };
+  
   confirmAddChannelBtn.addEventListener('click', doAddChannel);
+  if (cancelAddChannelBtn) cancelAddChannelBtn.addEventListener('click', closeChannelAdd);
   addChannelInputEl.addEventListener('keydown', e => {
     if (e.key === 'Enter') doAddChannel();
-    else if (e.key === 'Escape') addChannelInputWrap.style.display = 'none';
+    else if (e.key === 'Escape') closeChannelAdd();
   });
 }
  
@@ -918,30 +944,30 @@ function renderMembers() {
  
     if (isAdminUser) {
       if (!isCurrentUser && !isAdmin) {
-        if (removingMemberId === m.id) {
-          actionBtn = `
-            <div class="member-row-actions confirm-mode">
-              <button class="member-confirm-btn" data-user-id="${m.id}" data-username="${m.username}">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>Confirm
-              </button>
-              <button class="member-cancel-btn" data-user-id="${m.id}">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>Cancel
-              </button>
-            </div>`;
-        } else {
-          actionBtn = `
-            <div class="member-row-actions">
-              <button class="remove-btn" data-user-id="${m.id}">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2l-2-14"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>Remove
-              </button>
+      if (removingMemberId === m.id) {
+        actionBtn = `
+          <div class="member-row-actions confirm-mode">
+            <button class="member-confirm-btn" data-user-id="${m.id}" data-username="${m.username}">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>Confirm
+            </button>
+            <button class="member-cancel-btn" data-user-id="${m.id}">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>Cancel
+            </button>
+          </div>`;
+      } else {
+        actionBtn = `
+        <div class="member-row-actions">
+          <button class="remove-btn" data-user-id="${m.id}">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2l-2-14"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>Remove
+          </button>
             </div>`;
         }
       } else if (!isCurrentUser && isAdmin) {
         actionBtn = `
           <div class="member-row-actions">
             <span class="member-role-pill">Admin</span>
-          </div>`;
-      }
+          </div>`;     
+         }
     }
  
     row.innerHTML = `
@@ -1342,9 +1368,6 @@ document.addEventListener('keydown', e => {
     aiPanel.classList.remove('visible');
   }
 });
-
-
-
 /* ══════════════════════════════════════════════════
    Voice Notes
 ══════════════════════════════════════════════════ */

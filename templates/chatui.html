@@ -326,6 +326,8 @@
 
 {% endblock %}
 
+
+
 {% block extra_js %}
 {# Daily.co SDK — official CDN, always exposes window.DailyIframe #}
 <script crossorigin src="https://unpkg.com/@daily-co/daily-js"></script>
@@ -336,4 +338,3 @@
 {# Call system — must come AFTER both of the above #}
 <script src="{% static 'js/call.js' %}"></script>
 {% endblock %}
- 
