@@ -6,19 +6,27 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>KollabHub – Your Workspaces</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link
-    href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap"
-    rel="stylesheet">
-  <link rel="stylesheet" href="{% static 'css/profile.css' %}" />
-  <link rel="stylesheet" href="{% static 'css/main.css' %}" />
+  <!-- CSS -->
+      <link rel="stylesheet" href="{% static 'css/profile.css' %}">
+  <!-- Google Font -->
+      <link rel="preconnect" href="https://fonts.googleapis.com">
+      <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+      <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap"
+      rel="stylesheet">
 </head>
 
 <body>
 
   <!-- ── NAVBAR ── -->
   <nav class="navbar">
-    <span class="logo">KollabHub</span>
+    <!-- KollaHub -->
+      <a href="{% url 'home' %}" class="logo-link">
+        <div class="logo-icon">K</div>
+          <span class="logo-text">Kollab<span class="logo-accent">Hub</span></span>
+      </a>
+      <div class="header-actions">
+        <a href="{% url 'home' %}" class="home-link">Home</a>
+      </div>
     <div class="avatar">
       {% if user.profile_picture %}
       <img src="{{ user.profile_picture_url }}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">
@@ -249,8 +257,14 @@
         {% csrf_token %}
         <div class="form-group">
           <label for="workspaceImage">Workspace Image</label>
-          <input type="file" id="workspaceImage" name="fileUpload" accept="image/*" />
-          <div class="workspace-img-preview" id="createWorkspaceImagePreview">+</div>
+          <div class="workspace-image-row">
+            <div class="workspace-img-preview" id="createWorkspaceImagePreview">+</div>
+            <label class="workspace-file-label" for="workspaceImage">
+              <span class="workspace-file-label__title">Choose file</span>
+              <span class="workspace-file-label__hint">PNG, JPG, or SVG. Max 1 MB.</span>
+              <input type="file" id="workspaceImage" name="fileUpload" accept="image/*" />
+            </label>
+          </div>
         </div>
         <div class="form-row">
           <div class="form-group">
@@ -408,4 +422,3 @@
 </body>
 
 </html>
-

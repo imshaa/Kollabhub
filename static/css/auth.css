@@ -1,13 +1,6 @@
 /* ═══════════════════════════════════════════════════════════════════
    auth.css — KollabHub Authentication Pages
    Covers: signup, signup_verify_otp, login (+ forgot/reset screens)
-   
-   Paste the contents of this file into your main.css, or link it
-   as a separate stylesheet. All selectors are prefixed with .kh-
-   so they won't clash with your existing styles.
-
-   Fonts used: Syne (headings) + DM Sans (body)
-   These are loaded via Google Fonts in each HTML file's <head>.
 ═══════════════════════════════════════════════════════════════════ */
 
 

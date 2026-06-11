@@ -1,35 +1,23 @@
 /* ═══════════════════════════════════════════════════════════
-   KOLLABHUB  —  style.css  (single unified stylesheet)
-   All workspace-nav / workspace-card styles are rewritten
-   to use the same design tokens as the rest of the app.
-   No more duplicate / conflicting variable names.
+   KOLLABHUB  —  WorkSpace & ProFile CSS
 ═══════════════════════════════════════════════════════════ */
 
-/* ─────────────────────────────────────────────────────────
-   1. RESET
-───────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-/* ─────────────────────────────────────────────────────────
-   2. DESIGN TOKENS  (single source of truth)
-   ─ All colours, radii, shadows defined once here.
-   ─ The old workspace CSS used --color-*, --shadow-* names;
-     those are now aliased below so any legacy references
-     still resolve correctly without a second stylesheet.
-───────────────────────────────────────────────────────── */
 :root {
   /* ── Backgrounds ── */
+  --color-black:   #000000;
   --bg:            #0d0d0d;
-  --surface:       #1a1a1a;
+  --surface:       #0a0a0a;
   --surface2:      #222222;
   --card-bg:       #161616;          /* workspace cards */
 
   /* ── Borders ── */
-  --border:        #272727;
+  --border:        #2a2a2a;
   --border-soft:   rgba(255,255,255,0.05);
   --border-focus:  #484848;
 
-  /* ── Text ── */
+  /* ── Text ─ */
   --text:          #f0f0f0;
   --text-300:      #d4d4d4;
   --text-400:      #a3a3a3;
@@ -37,10 +25,10 @@
   --muted:         #888888;
 
   /* ── Accent / peach ── */
-  --accent:        #f4856a;          /* primary CTA, "Enter Workspace" */
-  --accent-light:  #e8b4a8;         /* .workspace-card-footer hover */
+  --accent:        #D4A89E;          /* primary CTA, "Enter Workspace" */
+  --accent-light:  #ECC4B8;         /* .workspace-card-footer hover */
   --accent-dim:    rgba(244,133,106,0.10);
-  --accent-hover:  #f9a08b;
+  --accent-hover:  #C99B8F;
 
   /* ── Semantic ── */
   --green:         #4ade80;
@@ -58,9 +46,7 @@
   --radius-xl:     18px;
 
   /* ─────────────────────────────────────────
-     Legacy aliases — map old workspace-CSS
-     variable names to our tokens so nothing
-     breaks if they appear in other files.
+    variable names 
   ───────────────────────────────────────── */
   --color-black:      var(--bg);
   --color-white:      var(--text);
@@ -77,15 +63,30 @@
 ───────────────────────────────────────────────────────── */
 html { scroll-behavior: smooth; }
 
+/* ===== RESET & BASE STYLES ===== */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
 body {
-  background: var(--bg);
-  color: var(--text);
-  font-family: 'DM Sans', sans-serif;
-  min-height: 100vh;
+    font-family: var(--font-family);
+    background-color: var(--color-black);
+    color: var(--color-white);
+    overflow-x: hidden;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    line-height: 1.6;
+}
+body::-webkit-scrollbar { width: 0; height: 0; }
+
+a {
+    text-decoration: none;
+    color: inherit;
 }
 
 /* ─────────────────────────────────────────────────────────
-   4. NAVBAR  (top-level app nav, shared across all pages)
+   4. NAVBAR
 ───────────────────────────────────────────────────────── */
 .navbar {
   display: flex;
@@ -100,13 +101,37 @@ body {
   top: 0;
   z-index: 50;                        /* matches workspace-nav z-index */
 }
-
-.logo {
-  font-family: 'Syne', sans-serif;
-  font-weight: 800;
-  font-size: 1.15rem;
-  letter-spacing: -0.02em;
-  color: var(--text);
+.logo-link {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    transition: all 0.3s ease;
+}
+.logo-icon {
+    width: 2.75rem;
+    height: 2.75rem;
+    border-radius: 0.75rem;
+    background: var(--color-peach-300);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--color-black);
+    font-weight: bold;
+    font-size: 1.25rem;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    transition: all 0.3s ease;
+}
+.logo-link:hover .logo-icon {
+    box-shadow: var(--shadow-glow);
+}
+.logo-text {
+    font-size: 1.25rem;
+    font-weight: bold;
+    letter-spacing: -0.025em;
+    color: var(--color-white);
+}
+.logo-accent {
+    color: var(--color-peach-300);
 }
 
 /* Workspace nav aliases (in case the workspace page uses these class names) */
@@ -176,6 +201,20 @@ body {
 
 .header-actions { display: flex; gap: 12px; align-items: center; padding-top: 6px; }
 
+.home-link {
+  color: var(--text);
+  font-weight: 500;
+  font-size: 0.95rem;
+  text-decoration: none;
+  padding: 0.45rem 0.75rem;
+  border-radius: 0.75rem;
+  transition: color 0.2s ease, background 0.2s ease;
+}
+.home-link:hover {
+  color: var(--accent);
+  background: rgba(244,133,106,0.08);
+}
+
 /* ─────────────────────────────────────────────────────────
    6. BUTTONS
 ───────────────────────────────────────────────────────── */
@@ -183,14 +222,19 @@ body {
   display: inline-flex; align-items: center; gap: 8px;
   padding: 10px 20px;
   background: transparent;
-  border: 1.5px solid var(--border-focus);
+  border: 2px solid rgba(255, 255, 255, 0.2);
   color: var(--text);
   border-radius: var(--radius);
   font-family: 'DM Sans', sans-serif; font-size: 0.875rem; font-weight: 500;
   cursor: pointer;
-  transition: border-color 0.2s, background 0.2s;
+  transition: border-color 0.2s, background 0.2s, color 0.2s, box-shadow 0.2s;
 }
-.btn-outline:hover { border-color: var(--muted); background: var(--surface); }
+.btn-outline:hover {
+  border-color: rgba(232, 180, 168, 0.5);
+  color: var(--accent);
+  background: rgba(255, 255, 255, 0.05);
+  box-shadow: var(--shadow-glow-sm);
+}
 
 .btn-primary {
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
@@ -223,8 +267,6 @@ body {
 
 /* ─────────────────────────────────────────────────────────
    7. WORKSPACE GRID
-   Both .workspace-grid (from original workspace CSS) and
-   the JS-rendered grid use the same rules.
 ───────────────────────────────────────────────────────── */
 .workspace-grid {
   display: grid;
@@ -237,9 +279,6 @@ body {
 
 /* ─────────────────────────────────────────────────────────
    8. WORKSPACE CARDS
-   .ws-card  = JS-rendered cards (workspaces list page)
-   .workspace-card = same card, alternate class name
-   Both share identical visual rules via shared tokens.
 ───────────────────────────────────────────────────────── */
 @keyframes fadeInUp {
   from { opacity: 0; transform: translateY(20px); }
@@ -507,7 +546,6 @@ body {
   color: #fff;
   overflow: hidden;
   box-shadow: 0 4px 18px rgba(0,0,0,0.35);
-  margin-top: 10px;
 }
 
 .workspace-img-preview img,
@@ -516,6 +554,51 @@ body {
   height: 100%;
   object-fit: cover;
   border-radius: 50%;
+}
+
+.workspace-image-row,
+.workspace-edit-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.workspace-file-label {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+  min-width: 180px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 14px 16px;
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
+}
+.workspace-file-label:hover {
+  border-color: var(--accent);
+  background: rgba(244,133,106,0.06);
+}
+.workspace-file-label__title {
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+.workspace-file-label__hint {
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+.workspace-file-label input[type="file"] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
 }
 
 /* File Upload Styling */
@@ -632,9 +715,6 @@ textarea {
   transform: translateY(-1px);
 } 
 
-
-/* ---------------------------------------------------------------- */
-
 /* task modal pieces (future use) */
 .priority-opts { display: flex; gap: 8px; }
 .priority-opt {
@@ -658,7 +738,7 @@ textarea {
 /* ─────────────────────────────────────────────────
    SCROLLBARS
 ───────────────────────────────────────────────── */
-::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar { width: 0; height: 0; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 10px; }
 ::-webkit-scrollbar-thumb:hover { background: #444; }
@@ -856,10 +936,10 @@ input.input-error {
 /* ─────────────────────────────────────────────────────────
    17. SCROLLBAR
 ───────────────────────────────────────────────────────── */
-::-webkit-scrollbar       { width: 6px; }
+::-webkit-scrollbar       { width: 0; height: 0; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--border); border-radius: 10px; }
-::-webkit-scrollbar-thumb:hover { background: #444; }
+::-webkit-scrollbar-thumb { background: transparent; }
+::-webkit-scrollbar-thumb:hover { background: transparent; }
 
 /* ─────────────────────────────────────────────────────────
    18. RESPONSIVE
