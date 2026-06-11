@@ -21,27 +21,27 @@
   flex-direction: column;
   border-right: 1px solid var(--border-color);
   flex-shrink: 0;
+  height: 100vh;
+  min-height: 100vh;
+  overflow: hidden;
+}
+
+.sidebar-body {
+  flex: 1 1 auto;
   overflow-y: auto;
   overflow-x: hidden;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
 
-/* Custom scrollbar styling for sidebar */
-.sidebar::-webkit-scrollbar {
-  width: 6px;
+.sidebar-body::-webkit-scrollbar {
+  width: 0;
+  height: 0;
 }
 
-.sidebar::-webkit-scrollbar-track {
+.sidebar-body::-webkit-scrollbar-track,
+.sidebar-body::-webkit-scrollbar-thumb {
   background: transparent;
-}
-
-.sidebar::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.2);
-  border-radius: 3px;
-  transition: background 0.2s;
-}
-
-.sidebar::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.4);
 }
 
 .main-area {
@@ -116,6 +116,97 @@
   color: #ef4444; /* Soft alert-red state fallback styling */
 }
 
+/* Workspace edit modal preview */
+/* Structural container for the avatar and button assembly */
+.workspace-edit-row {
+  display: flex;
+  flex-direction: column;   /* Directs layout flow vertically */
+  align-items: center;      /* Perfect horizontal centering */
+  justify-content: center;
+  gap: 16px;                /* Consistent element separation gap */
+  margin-bottom: 24px;      /* Distances layout assembly from input rows */
+  width: 100%;
+}
+.workspace-img-preview,
+#workspaceEditImagePreview {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* background: linear-gradient(135deg, var(--accent), #e05a7d); */
+  background: linear-gradient(135deg, var(--accent, #6366f1), #e05a7d);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35);
+  flex-shrink: 0;
+}
+
+.workspace-img-preview img,
+#workspaceEditImagePreview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center center;
+  border-radius: 50%;
+}
+/*  "Change Avatar" Button   */
+.workspace-file-label {
+  position: relative;       /* Required layout context for nested hidden inputs */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;                /* Balanced padding distribution */
+  padding: 10px 24px;       /* Custom capsule padding ratios */
+  border-radius: 14px;      /* Match custom card/button rounding from image reference */
+  border: 1px solid #282828; /* Charcoal border frame */
+  background: #121212;      /* Deep dark matte workspace button container background */
+  color: #e2dad1;           /* Warm-tinted neutral off-white font coloring */
+  font-size: 0.95rem;
+  font-weight: 500;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.2s ease, border-color 0.2s ease, transform 0.1s ease;
+}
+
+/* Actionable User Feedback States */
+.workspace-file-label:hover {
+  background: #181818;
+  border-color: #383838;
+}
+
+.workspace-file-label:active {
+  transform: scale(0.98);   /* Smooth micro-bounce tactile press down effect */
+}
+
+/* Icon Container */
+.workspace-file-label-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #e2dad1;           /* Mirror standard component label coloring values */
+}
+
+/* Precise dimensions for the User Outline SVG */
+.workspace-file-label-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.workspace-file-label__title {
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+/* Functional hidden element overlay boundary mask */
+.workspace-file-label input[type="file"] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+}
 /* -------------------- Responsivenes ------------------ */
 
 
