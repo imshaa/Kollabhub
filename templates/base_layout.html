@@ -5,8 +5,10 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>{% block title %}KollabHub{% endblock %}</title>
+  <!-- CSS Style Sheet -->
   <link rel="stylesheet" href="{% static 'css/base_layout.css' %}"/>
   <link rel="stylesheet" href="{% static 'css/chat.css' %}"/>
+  <link rel="stylesheet" href="{% static 'css/notifications.css' %}"/>
   {% block extra_css %}{% endblock %}
 </head>
 <body>
@@ -31,19 +33,22 @@
         </div>
       </div>
     </div>
-
+    <div class="sidebar-body">
+<!-- Sidebar Navigation -->
     <nav class="sidebar-nav">
+      <!-- Dashboard back to creation/joining workspaces page -->
       <a href="{% url 'profile' %}" class="nav-item" id="backToWorkspacesBtn">
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
         Dashboard
       </a>
-
       {% if workspace %}
+
       <a href="{% url 'chatui' workspace.id %}" class="nav-item {% block nav_chat %}{% endblock %}" id="chatNavBtn">
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
         Chat
         <span class="badge nav-badge" id="chatNavBadge" style="display:none;"></span>
       </a>
+      <!-- TaskBoard -->
       <a href="{% url 'taskboard' workspace.id %}" class="nav-item {% block nav_tasks %}{% endblock %}" id="taskNavBtn">
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <rect x="3" y="3" width="18" height="18" rx="2"/>
@@ -52,36 +57,46 @@
         Tasks
         <span class="badge nav-badge" id="taskNavBadge" style="display:none;"></span>
       </a>
-       <!-- Kollab AI -->
+      <!-- Kollab AI -->
       <a href="{% url 'ai' workspace.id %}" class="nav-item {% block nav_ai %}{% endblock %}" id="aiNavBtn">
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>
         Kollab AI
       </a>
       {% endif %}
-      
+      <!-- Settings -->
       <button class="nav-item {% block nav_settings %}{% endblock %}" data-view="settings" id="settingsNavBtn">
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93A10 10 0 1 0 4.93 19.07 10 10 0 0 0 19.07 4.93z"/></svg>
         Settings
       </button>
     </nav>
-
+    <!-- Channels -->
     <div class="sidebar-section">
       <div class="sidebar-section-label" style="display:flex;align-items:center;justify-content:space-between;">
         <span>Channels</span>
         <button class="icon-btn" id="addChannelBtn" title="Add Channel" style="font-size:1.2em;padding:0 6px;">+</button>
       </div>
       <div id="channelList"></div>
-      <div id="addChannelInputWrap" style="display:none;margin-top:8px;">
-        <input type="text" id="addChannelInput" class="chat-input" placeholder="Enter channel name..." style="width:90%;font-size:.95em;" />
-        <div class="channel-actions-row" style="margin-top: 6px; display: flex; gap: 4px; padding-left: 2px;">
+      <div id="addChannelInputWrap" class="channel-add-wrap" style="display:none;margin-top:8px;">
+        <input type="text" id="addChannelInput" class="chat-input" placeholder="Enter channel name..." style="width:100%;font-size:.95em;" />
+        <div class="channel-actions-row" style="margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap;">
           <button class="btn-accent-sm" id="confirmAddChannelBtn">Add</button>
           <button class="btn-cancel-sm" id="cancelAddChannelBtn">Cancel</button>
         </div>
       </div>
     </div>
-
+<!-- Direct Messages -->
     <div class="sidebar-section">
-      <div class="sidebar-section-label">Direct Messages</div>
+      <div class="sidebar-section-label" style="display:flex;align-items:center;justify-content:space-between;">
+        <span>Direct Messages</span>
+        <button class="icon-btn" id="addDmBtn" title="New DM" style="font-size:1.2em;padding:0 6px;">+</button>
+      </div>
+      <div id="dmAddWrap" class="dm-add-wrap" style="display:none;margin-top:8px;">
+        <input type="text" id="addDmInput" class="chat-input" placeholder="Start a direct message..." style="width:100%;font-size:.95em;" />
+        <div class="channel-actions-row" style="margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap;">
+          <button class="btn-accent-sm" id="confirmAddDmBtn">Add</button>
+          <button class="btn-cancel-sm" id="cancelAddDmBtn">Cancel</button>
+        </div>
+      </div>
       {% for member in dm_members %}
       <button class="dm-item" data-dm-user-id="{{ member.user.id }}"
               onclick="if(typeof openDM === 'function') openDM('{{ member.user.id }}','{{ member.user.display_name|default:member.user.username }}')">
@@ -93,7 +108,8 @@
       <p style="font-size:.78rem;color:var(--text-muted,#888);padding:4px 8px;margin:0;">No members yet</p>
       {% endfor %}
     </div>
-
+  </div>
+  <!-- Edit Profile -->
     <div class="sidebar-footer">
       <div class="user-info" id="openProfileBtn">
         <div class="user-avatar-wrap">
@@ -119,11 +135,12 @@
     {% block main_content %}{% endblock %}
   </div>
 
-  <button class="ai-fab" id="aiFab" title="Kollab AI">
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>
-  </button>
+  <div class="ai-fab-wrap" id="aiFabWrap" {% if workspace %}data-full-ai-url="{% url 'ai' workspace.id %}"{% endif %}>
+    <button class="ai-fab" id="aiFab" title="Kollab AI">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>
+    </button>
+  </div>
 
-  
   <div class="ai-panel" id="aiPanel">
     <div class="ai-panel-header">
       <div class="ai-header-info">
@@ -156,34 +173,6 @@
       </button>
     </div>
   </div>
-<!-- 
-  <div class="ai-panel" id="aiPanel">
-    <div class="ai-panel-header">
-      <div class="ai-header-info">
-        <div class="ai-avatar">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg>
-        </div>
-        <div>
-          <p class="ai-name">Kollab AI</p>
-          <p class="ai-tagline">Always here to help</p>
-        </div>
-      </div>
-      <button class="icon-btn" id="aiClose">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-      </button>
-    </div>
-    <div class="ai-messages" id="aiMessages">
-      <div class="ai-msg ai">
-        <div class="ai-msg-bubble">Hi! I can help you summarize meetings, suggest tasks, or optimize your workflow. What do you need?</div>
-      </div>
-    </div>
-    <div class="ai-input-wrap">
-      <input type="text" id="aiInput" class="ai-input" placeholder="Ask Kollab AI anything…"/>
-      <button class="ai-send" id="aiSend">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>
-      </button>
-    </div>
-  </div> -->
 
 </div>
 
@@ -201,15 +190,24 @@
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
       </div>
+      <!-- Workspace Edit Card -->
       <div class="form-card">
-        <div class="profile-av-wrap">
+        <div class="workspace-edit-row">
           {% if workspace.image %}
-            <img id="workspaceEditImagePreview" class="profile-av" src="{{ workspace.image_url }}" alt="Workspace Image Preview" />
+            <img id="workspaceEditImagePreview" class="workspace-img-preview" src="{{ workspace.image_url }}" alt="Workspace Image Preview" />
           {% else %}
-            <div id="workspaceEditImagePreview" class="profile-av">{{ workspace.title|default:"W"|slice:":1" }}</div>
+            <div id="workspaceEditImagePreview" class="workspace-img-preview">{{ workspace.title|default:"W"|slice:":1" }}</div>
           {% endif %}
-          <label for="workspaceEditImage" style="cursor:pointer;color:var(--accent);font-size:0.8rem;font-weight:500;">Change Image</label>
-          <input type="file" id="workspaceEditImage" name="fileUpload" accept="image/*" style="display:none;">
+          <label class="workspace-file-label" for="workspaceEditImage">
+            <span class="workspace-file-label-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                <circle cx="12" cy="7" r="4"></circle>
+              </svg>
+            </span>
+            <span class="workspace-file-label__title">Change Avatar</span>
+            <input type="file" id="workspaceEditImage" name="fileUpload" accept="image/*" />
+          </label>
         </div>
         <div class="form-group">
           <label for="workspaceEditName">Workspace Name</label>
@@ -305,6 +303,13 @@
   "userId": {{ request.user.id|default:"null" }},
   "notificationCounts": {% if notification_counts_json %}{{ notification_counts_json|safe }}{% else %}null{% endif %}
 }
+</script>
+<script>
+  window.WORKSPACE_MEMBER_MAP = window.WORKSPACE_MEMBER_MAP || {};
+  {% for member in members %}
+  window.WORKSPACE_MEMBER_MAP["{{ member.user.display_name|default:member.user.username|escapejs }}"] = {{ member.user.id }};
+  window.WORKSPACE_MEMBER_MAP["{{ member.user.username|escapejs }}"] = {{ member.user.id }};
+  {% endfor %}
 </script>
 
 <script src="{% static 'js/base_layout.js' %}"></script>

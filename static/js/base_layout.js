@@ -201,7 +201,8 @@
   if (closeBtn)  closeBtn.addEventListener('click', closeFn);
   if (cancelBtn) cancelBtn.addEventListener('click', closeFn);
   if (overlay)   overlay.addEventListener('click', function(e){ if (e.target === overlay) closeFn(); });
-  document.querySelectorAll('.status-opt').forEach(function(btn){
+  document.querySelectorAll('.status-opt').forEach(function(btn)
+  {
     btn.addEventListener('click', function(){
       document.querySelectorAll('.status-opt').forEach(function(b){ b.classList.remove('active'); });
       btn.classList.add('active');

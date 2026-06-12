@@ -15,10 +15,10 @@
   --text-400:     #a3a3a3;
   --text-500:     #737373;
   --muted:        #888;
-  --accent:       #f4856a;
-  --accent-light: #e8b4a8;
-  --accent-dim:   rgba(244,133,106,0.10);
-  --accent-hover: #f9a08b;
+  --accent:       #D4A89E;
+  --accent-light: #ECC4B8;
+  --accent-dim:   rgba(212,168,158,0.12);
+  --accent-hover: #C99B8F;
   --green:        #4ade80;
   --green-dim:    rgba(74,222,128,0.12);
   --red:          #f87171;
@@ -183,9 +183,7 @@ html, body {
   display: none;
   position: absolute;
   top: calc(100% + 8px);
-  left: 0;       /* aligns to the left edge of the filter button */
-  right: auto;
- 
+  right: 0;
   width: 230px;
   background: var(--surface);
   border: 1px solid var(--border);
@@ -1679,7 +1677,6 @@ input[type="text"]::placeholder { color: var(--text-500); }
 
 /* ── Toast ────────────────────────────────────────── */
 #toastContainer { pointer-events:none; }
-
 
 /* ═══════════════════════════════════════════════════════════════
    TASKBOARD RESPONSIVE PATCH
