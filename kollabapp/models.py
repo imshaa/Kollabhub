@@ -123,7 +123,14 @@ class Message(models.Model):
     created_at   = models.DateTimeField(auto_now_add=True)
  
     class Meta:
-        ordering = ['created_at']
+        ordering = ['created_at', 'id']
+        indexes = [
+            models.Index(fields=['workspace']),
+            models.Index(fields=['sender']),
+            models.Index(fields=['created_at']),
+            models.Index(fields=['message_uuid']),
+            models.Index(fields=['workspace', 'created_at', 'id']),
+        ]
  
     def __str__(self):
         sender = self.sender.username if self.sender else 'unknown'
@@ -145,7 +152,15 @@ class DirectMessage(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
  
     class Meta:
-        ordering = ['created_at']
+        ordering = ['created_at', 'id']
+        indexes = [
+            models.Index(fields=['workspace']),
+            models.Index(fields=['sender']),
+            models.Index(fields=['receiver']),
+            models.Index(fields=['created_at']),
+            models.Index(fields=['workspace', 'sender', 'receiver', 'created_at']),
+            models.Index(fields=['workspace', 'receiver', 'sender', 'created_at']),
+        ]
  
     def __str__(self):
         return f"{self.sender} → {self.receiver}"

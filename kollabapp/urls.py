@@ -100,7 +100,7 @@ urlpatterns = [
 
     # AI Urls 
     path("ai-chat/<int:workspace_id>/", views.ai_page, name="ai_page"),
-    path("ai/<int:workspace_id>/", views.ai, name="ai"),
+    path("ai/<int:workspace_id>/", views.ai_page, name="ai"),
     path('api/workspace/<int:workspace_id>/ai-chat/',         views.ai_chat,         name='ai_chat'),
     path('api/ai-chat/',                                      views.ai_chat_legacy,  name='ai_chat_legacy'),
     path('api/workspace/<int:workspace_id>/ai-history/',      views.ai_history,      name='ai_history'),

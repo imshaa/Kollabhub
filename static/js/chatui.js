@@ -30,6 +30,15 @@ try {
 let currentDMUser = null;
 let lastDMUser = null;
 let lastMessageDayKey = null;
+let firstMessageDayKey = null;
+
+let workspaceHistoryCursor = null;
+let workspaceHasMore = true;
+let workspaceHistoryLoading = false;
+
+let dmHistoryCursor = null;
+let dmHasMore = true;
+let dmHistoryLoading = false;
 
 function getDateKey(date) {
   const d = new Date(date);
@@ -46,17 +55,24 @@ function formatChatDay(date) {
   });
 }
 
-function insertDateDivider(date) {
+function insertDateDivider(date, prepend = false) {
   const key = getDateKey(date);
-  if (key === lastMessageDayKey) return;
-  lastMessageDayKey = key;
+  if (!chatContainer) return null;
+  if (chatContainer.querySelector(`.msg-date-divider[data-day-key="${key}"]`)) {
+    return null;
+  }
 
   const divider = document.createElement('div');
   divider.className = 'msg-date-divider';
+  divider.dataset.dayKey = key;
   divider.textContent = formatChatDay(date);
-  if (chatContainer) {
+
+  if (prepend && chatContainer.firstChild) {
+    chatContainer.insertBefore(divider, chatContainer.firstChild);
+  } else {
     chatContainer.appendChild(divider);
   }
+  return divider;
 }
 
 function joinDM(userId) {
@@ -125,62 +141,119 @@ const sendButton = document.getElementById("sendBtn") || document.getElementById
 function $(id) { return document.getElementById(id); }
 function $$(sel) { return Array.from(document.querySelectorAll(sel)); }
 
+function _getSenderInfo(msg) {
+  return {
+    sender: msg.sender_display_name || msg.sender_username || msg.sender || 'Unknown',
+    avatar: msg.sender_avatar || '/static/Areeba.jpeg',
+    time:   new Date(msg.created_at || msg.timestamp || Date.now()),
+    side:   (msg.sender_id ? msg.sender_id === currentUserId : msg.sender === username) ? 'right' : 'left',
+    messageId: msg.message_id || (msg.id ? String(msg.id) : null),
+  };
+}
 
+function _markMessageSeen(msg) {
+  if (!window._seenMessageIds) window._seenMessageIds = new Set();
+  const key = msg.message_id || (msg.id ? String(msg.id) : null);
+  if (!key) return true;
+  if (window._seenMessageIds.has(key)) return false;
+  window._seenMessageIds.add(key);
+  return true;
+}
+
+function _renderChatMessage(msg, prepend = false) {
+  if (!_markMessageSeen(msg)) return;
+  const info = _getSenderInfo(msg);
+
+  if (msg.voice_url) {
+    appendVoiceNoteToWindow({
+      sender: info.sender,
+      avatar: info.avatar,
+      voiceUrl: msg.voice_url,
+      duration: msg.duration || 0,
+      side: info.side,
+      time: info.time,
+      messageId: info.messageId,
+      prepend,
+    });
+    return;
+  }
+
+  if (msg.files && msg.files.length) {
+    msg.files.forEach(f => {
+      appendFileMessageToWindow({
+        sender:       info.sender,
+        avatar:       info.avatar,
+        fileUrl:      f.file_url,
+        fileId:       f.file_id,
+        fileName:     f.original_name,
+        mimeType:     f.mime_type,
+        fileSize:     f.file_size,
+        fileCategory: f.file_category,
+        side:         info.side,
+        time:         info.time,
+        messageId:    info.messageId,
+        prepend,
+      });
+    });
+    if (!msg.message || !msg.message.trim()) return;
+  }
+
+  if (msg.message && msg.message.trim()) {
+    appendMessageToWindow({
+      sender: info.sender,
+      avatar: info.avatar,
+      text: msg.message,
+      side: info.side,
+      time: info.time,
+      prepend,
+    });
+  }
+}
+
+function _prependMessages(messages) {
+  if (!chatContainer || !messages || !messages.length) return;
+  const previousHeight = chatContainer.scrollHeight;
+  const previousScrollTop = chatContainer.scrollTop;
+  messages.forEach(msg => {
+    _renderChatMessage(msg, true);
+  });
+  const newHeight = chatContainer.scrollHeight;
+  chatContainer.scrollTop = Math.max(newHeight - previousHeight + previousScrollTop, 0);
+}
+
+async function _fetchHistory(path) {
+  const resp = await fetch(path, { credentials: 'same-origin' });
+  if (!resp.ok) throw new Error('History fetch failed');
+  const payload = await resp.json();
+  return payload;
+}
 
 // Load recent message history when opening the chat UI
 async function loadWorkspaceHistory() {
+  if (!chatContainer) return;
   chatContainer.innerHTML = "";
   lastMessageDayKey = null;
+  firstMessageDayKey = null;
+  workspaceHistoryCursor = null;
+  workspaceHasMore = true;
+  workspaceHistoryLoading = true;
+
   try {
-    const resp = await fetch(`/api/workspace/${workspaceId}/messages/?limit=200`, {credentials: 'same-origin'});
-    if (!resp.ok) throw new Error('Failed to fetch history');
-    const msgs = await resp.json();
+    const payload = await _fetchHistory(`/api/workspace/${workspaceId}/messages/?limit=50`);
+    const msgs = payload.messages || [];
+    workspaceHistoryCursor = payload.next_cursor || null;
+    workspaceHasMore = Boolean(payload.has_more);
+
     if (!window._seenMessageIds) window._seenMessageIds = new Set();
-    msgs.forEach(m => {
-      const sender = m.sender_display_name || m.sender_username || 'Unknown';
-      const text = m.message || '';
-      const avatar = m.sender_avatar || '/static/Areeba.jpeg';
-      const time = m.timestamp ? new Date(m.timestamp) : (m.created_at ? new Date(m.created_at) : new Date());
-      const senderId = m.sender_id || null;
-      if (m.message_id) {
-        if (window._seenMessageIds.has(m.message_id)) return;
-        window._seenMessageIds.add(m.message_id);
-      }
-      const isOwnMessage = senderId ? (senderId === currentUserId) : (m.sender_username === username);
-      if (m.voice_url) {
-        appendVoiceNoteToWindow({
-          sender:    sender,
-          avatar:    avatar,
-          voiceUrl:  m.voice_url,
-          duration:  m.duration || 0,
-          side:      isOwnMessage ? 'right' : 'left',
-          time:      time,
-          messageId: m.message_id
-        });
-      }
-      if (m.files && m.files.length) {
-        m.files.forEach(f => {
-          appendFileMessageToWindow({
-            sender:       sender,
-            avatar:       avatar,
-            fileUrl:      f.file_url,
-            fileId:       f.file_id,
-            fileName:     f.original_name,
-            mimeType:     f.mime_type,
-            fileSize:     f.file_size,
-            fileCategory: f.file_category,
-            side:         isOwnMessage ? 'right' : 'left',
-            time:         time,
-            messageId:    m.message_id,
-          });
-        });
-      }
-      if (!m.voice_url && !(m.files && m.files.length)) {
-        appendMessageToWindow({ sender, avatar, text, side: isOwnMessage ? 'right' : 'left', time });
-      }
-    });
+    msgs.forEach(m => _renderChatMessage(m));
+
+    if (chatContainer) {
+      chatContainer.scrollTop = chatContainer.scrollHeight;
+    }
   } catch (err) {
     console.warn('Could not load chat history:', err);
+  } finally {
+    workspaceHistoryLoading = false;
   }
 }
 if (workspaceId) {
@@ -188,6 +261,55 @@ if (workspaceId) {
   if (window.NotificationManager) {
     window.NotificationManager.markRead('chat');
   }
+}
+
+if (chatContainer) {
+  chatContainer.addEventListener('scroll', async () => {
+    if (workspaceHistoryLoading || dmHistoryLoading) return;
+    if (chatContainer.scrollTop > 120) return;
+
+    if (currentDMUser) {
+      if (!dmHasMore || !dmHistoryCursor) return;
+      dmHistoryLoading = true;
+      try {
+        const payload = await _fetchHistory(
+          `/api/workspace/${workspaceId}/dm/${currentDMUser}/?limit=50&before=${encodeURIComponent(dmHistoryCursor)}`
+        );
+        const msgs = payload.messages || [];
+        if (!msgs.length) {
+          dmHasMore = false;
+          return;
+        }
+        dmHistoryCursor = payload.next_cursor || null;
+        dmHasMore = Boolean(payload.has_more);
+        _prependMessages(msgs);
+      } catch (err) {
+        console.warn('Could not load older DM messages:', err);
+      } finally {
+        dmHistoryLoading = false;
+      }
+    } else {
+      if (!workspaceHasMore || !workspaceHistoryCursor) return;
+      workspaceHistoryLoading = true;
+      try {
+        const payload = await _fetchHistory(
+          `/api/workspace/${workspaceId}/messages/?limit=50&before=${encodeURIComponent(workspaceHistoryCursor)}`
+        );
+        const msgs = payload.messages || [];
+        if (!msgs.length) {
+          workspaceHasMore = false;
+          return;
+        }
+        workspaceHistoryCursor = payload.next_cursor || null;
+        workspaceHasMore = Boolean(payload.has_more);
+        _prependMessages(msgs);
+      } catch (err) {
+        console.warn('Could not load older workspace messages:', err);
+      } finally {
+        workspaceHistoryLoading = false;
+      }
+    }
+  });
 }
 
 
@@ -334,8 +456,10 @@ function initials(name) {
   return name.split(' ').map(w => w[0]).join('').toUpperCase();
 }
 
-function appendMessageToWindow({ sender, avatar, text, side = "left", time = new Date() }) {
-  insertDateDivider(time);
+function appendMessageToWindow({ sender, avatar, text, side = "left", time = new Date(), prepend = false }) {
+  time = time instanceof Date ? time : new Date(time || Date.now());
+  insertDateDivider(time, prepend);
+
   const group = document.createElement('div');
   group.className = 'msg-group' + (side === 'right' ? ' self' : '');
 
@@ -356,10 +480,15 @@ function appendMessageToWindow({ sender, avatar, text, side = "left", time = new
 
   group.appendChild(av);
   group.appendChild(body);
-  if (chatContainer) {
+  if (!chatContainer) return group;
+
+  if (prepend && chatContainer.firstChild) {
+    chatContainer.insertBefore(group, chatContainer.firstChild);
+  } else {
     chatContainer.appendChild(group);
     chatContainer.scrollTop = chatContainer.scrollHeight;
   }
+  return group;
 }
 
 /* show typing indicator for a user, auto remove after timeout */
@@ -426,64 +555,35 @@ function openDM(userId, username) {
 
 // Loading DM history when opening a DM chat window
 async function loadDMHistory(userId){
-
+  if (!chatContainer) return;
   chatContainer.innerHTML = "";
   lastMessageDayKey = null;
+  firstMessageDayKey = null;
+  dmHistoryCursor = null;
+  dmHasMore = true;
+  dmHistoryLoading = true;
 
-  try{
+  try {
+    const payload = await _fetchHistory(`/api/workspace/${workspaceId}/dm/${userId}/?limit=50`);
+    const msgs = payload.messages || [];
+    dmHistoryCursor = payload.next_cursor || null;
+    dmHasMore = Boolean(payload.has_more);
 
-    const resp = await fetch(
-      `/api/workspace/${workspaceId}/dm/${userId}/`
-    );
-
-    const msgs = await resp.json();
-
+    if (!window._seenMessageIds) window._seenMessageIds = new Set();
     msgs.forEach(m => {
-      const isOwn = m.sender === username || m.sender_id === currentUserId;
-      if (m.voice_url) {
-        appendVoiceNoteToWindow({
-          sender:    m.sender,
-          avatar:    "/static/Areeba.jpeg",
-          voiceUrl:  m.voice_url,
-          duration:  m.duration || 0,
-          side:      isOwn ? 'right' : 'left',
-          time:      new Date(m.created_at),
-          messageId: m.id ? String(m.id) : undefined,
-        });
-      }
-      if (m.files && m.files.length) {
-        m.files.forEach(f => {
-          appendFileMessageToWindow({
-            sender:       m.sender,
-            avatar:       "/static/Areeba.jpeg",
-            fileUrl:      f.file_url,
-            fileId:       f.file_id,
-            fileName:     f.original_name,
-            mimeType:     f.mime_type,
-            fileSize:     f.file_size,
-            fileCategory: f.file_category,
-            side:         isOwn ? 'right' : 'left',
-            time:         new Date(m.created_at),
-            messageId:    m.id ? String(m.id) : undefined,
-          });
-        });
-      }
-      if (!m.voice_url && !(m.files && m.files.length)) {
-        appendMessageToWindow({
-          sender: m.sender,
-          text: m.message,
-          side: m.sender === username ? "right" : "left",
-          avatar: "/static/Areeba.jpeg",
-          time: new Date(m.created_at)
-        });
-      }
-
+      m.sender_display_name = m.sender;
+      m.sender_username = m.sender;
+      _renderChatMessage(m);
     });
 
-  }catch(err){
+    if (chatContainer) {
+      chatContainer.scrollTop = chatContainer.scrollHeight;
+    }
+  } catch (err) {
     console.error("DM load failed", err);
+  } finally {
+    dmHistoryLoading = false;
   }
-
 }
 //------------------------------- csrf token -------------------------------
 function getCSRFToken() {
@@ -1695,10 +1795,10 @@ async function uploadVoiceNote() {
 // ── Render voice note player ───────────────────────────────────────────────────
 let _vnPlayerCount = 0;
  
-function appendVoiceNoteToWindow({ sender, avatar, voiceUrl, duration, side, time, messageId }) {
+function appendVoiceNoteToWindow({ sender, avatar, voiceUrl, duration, side, time, messageId, prepend = false }) {
   if (!chatContainer || !voiceUrl) return;
   time = time instanceof Date ? time : new Date(time || Date.now());
-  insertDateDivider(time);
+  insertDateDivider(time, prepend);
  
   const pid = 'vnp_' + (++_vnPlayerCount);
  
@@ -1752,11 +1852,15 @@ function appendVoiceNoteToWindow({ sender, avatar, voiceUrl, duration, side, tim
  
   group.appendChild(av);
   group.appendChild(body);
-  chatContainer.appendChild(group);
-  chatContainer.scrollTop = chatContainer.scrollHeight;
+  if (prepend && chatContainer.firstChild) {
+    chatContainer.insertBefore(group, chatContainer.firstChild);
+  } else {
+    chatContainer.appendChild(group);
+    chatContainer.scrollTop = chatContainer.scrollHeight;
+  }
  
-  // Wire up player controls
   wireVoiceNotePlayer(pid, totalSec);
+  return group;
 }
  
 function wireVoiceNotePlayer(pid, totalSecHint) {
@@ -2264,10 +2368,10 @@ async function sendPendingFile() {
  
 // ── Render a file message bubble ───────────────────────────────────────────────
 function appendFileMessageToWindow({ sender, avatar, fileUrl, fileId, fileName,
-    mimeType, fileSize, fileCategory, side, time, messageId }) {
+    mimeType, fileSize, fileCategory, side, time, messageId, prepend = false }) {
   if (!chatContainer) return;
   time = time instanceof Date ? time : new Date(time || Date.now());
-  insertDateDivider(time);
+  insertDateDivider(time, prepend);
  
   const group = document.createElement('div');
   group.className = 'msg-group' + (side === 'right' ? ' self' : '');
@@ -2348,8 +2452,13 @@ function appendFileMessageToWindow({ sender, avatar, fileUrl, fileId, fileName,
  
   group.appendChild(av);
   group.appendChild(body);
-  chatContainer.appendChild(group);
-  chatContainer.scrollTop = chatContainer.scrollHeight;
+  if (prepend && chatContainer.firstChild) {
+    chatContainer.insertBefore(group, chatContainer.firstChild);
+  } else {
+    chatContainer.appendChild(group);
+    chatContainer.scrollTop = chatContainer.scrollHeight;
+  }
+  return group;
 }
  
 // Fallback card if image fails to load (signed URL expired)
@@ -2390,113 +2499,6 @@ async function refreshFileUrl(fileId, btn) {
   btn.style.opacity = '1';
 }
  
-// Patch history loaders to handle 'files' arrays from the API
-(function patchHistoryForFiles() {
-  // We override loadWorkspaceHistory to also handle files in history
-  // This piggybacks on the voice-note patch already in place —
-  // we add file rendering inside the same forEach loop.
-  // Since the voice-note patch already overrides loadWorkspaceHistory,
-  // we need to wrap it again carefully.
- 
-  const _prevWS = window.loadWorkspaceHistory;
-  window.loadWorkspaceHistory = async function() {
-    if (!chatContainer || !workspaceId) return;
-    chatContainer.innerHTML = '';
-    window.lastMessageDayKey = null;
-    try {
-      const resp = await fetch(`/api/workspace/${workspaceId}/messages/?limit=200`, { credentials: 'same-origin' });
-      if (!resp.ok) throw new Error('Failed');
-      const msgs = await resp.json();
-      if (!window._seenMessageIds) window._seenMessageIds = new Set();
- 
-      msgs.forEach(m => {
-        if (m.message_id) {
-          if (window._seenMessageIds.has(m.message_id)) return;
-          window._seenMessageIds.add(m.message_id);
-        }
-        const sender   = m.sender_display_name || m.sender_username || 'Unknown';
-        const avatar   = m.sender_avatar || '/static/Areeba.jpeg';
-        const time     = new Date(m.created_at || m.timestamp || Date.now());
-        const senderId = m.sender_id || null;
-        const isOwn    = senderId ? (senderId === currentUserId) : (m.sender_username === username);
-        const side     = isOwn ? 'right' : 'left';
- 
-        // 1. Voice note
-        if (m.voice_url) {
-          appendVoiceNoteToWindow({ sender, avatar, voiceUrl: m.voice_url,
-            duration: m.duration || 0, side, time, messageId: m.message_id });
-        }
- 
-        // 2. File attachments
-        if (m.files && m.files.length) {
-          m.files.forEach(f => {
-            appendFileMessageToWindow({
-              sender, avatar, side, time,
-              fileUrl:      f.file_url,
-              fileId:       f.file_id,
-              fileName:     f.original_name,
-              mimeType:     f.mime_type,
-              fileSize:     f.file_size,
-              fileCategory: f.file_category,
-              messageId:    m.message_id,
-            });
-          });
-        }
- 
-        // 3. Text
-        if (m.message && m.message.trim()) {
-          appendMessageToWindow({ sender, avatar, text: m.message, side, time });
-        }
-      });
-    } catch (err) {
-      console.warn('History load error:', err);
-    }
-  };
- 
-  // Same for DM history
-  const _prevDM = window.loadDMHistory;
-  window.loadDMHistory = async function(userId) {
-    if (!chatContainer) return;
-    chatContainer.innerHTML = '';
-    window.lastMessageDayKey = null;
-    try {
-      const resp = await fetch(`/api/workspace/${workspaceId}/dm/${userId}/`);
-      const msgs = await resp.json();
-      msgs.forEach(m => {
-        const isOwn = m.sender === username || m.sender_id === currentUserId;
-        const side  = isOwn ? 'right' : 'left';
-        const time  = new Date(m.created_at);
- 
-        if (m.voice_url) {
-          appendVoiceNoteToWindow({ sender: m.sender, avatar: '/static/Areeba.jpeg',
-            voiceUrl: m.voice_url, duration: m.duration || 0, side, time });
-        }
-        if (m.files && m.files.length) {
-          m.files.forEach(f => {
-            appendFileMessageToWindow({
-              sender: m.sender, avatar: '/static/Areeba.jpeg', side, time,
-              fileUrl:      f.file_url,
-              fileId:       f.file_id,
-              fileName:     f.original_name,
-              mimeType:     f.mime_type,
-              fileSize:     f.file_size,
-              fileCategory: f.file_category,
-            });
-          });
-        }
-        if (m.message && m.message.trim()) {
-          appendMessageToWindow({ sender: m.sender, text: m.message, side,
-            avatar: '/static/Areeba.jpeg', time });
-        }
-      });
-    } catch (err) {
-      console.error('DM history load error:', err);
-    }
-  };
- 
-  // Reload
-  if (workspaceId) window.loadWorkspaceHistory();
-})();
  
  
 // ── Utilities ─────────────────────────────────────────────────────────────────

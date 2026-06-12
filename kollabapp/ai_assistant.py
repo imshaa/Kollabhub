@@ -22,7 +22,6 @@ try:
         ml_model = pickle.load(f)
     with open(VECTOR_PATH, "rb") as f:
         vectorizer = pickle.load(f)
-    print("KollabHub AI: Tier 2 ML model loaded successfully.")
 except Exception as e:
     print(f"KollabHub AI: Tier 2 model not loaded — {e}")
 
@@ -32,9 +31,8 @@ groq_client  = None
 try:
     if GROQ_API_KEY:
         groq_client = Groq(api_key=GROQ_API_KEY)
-        print("KollabHub AI: Tier 3 Groq API loaded successfully.")
     else:
-        print("KollabHub AI: Groq API key not found in .env")
+        print(f"KollabHub AI: Groq API key not found in environment")
 except Exception as e:
     print(f"KollabHub AI: Tier 3 Groq not loaded — {e}")
 

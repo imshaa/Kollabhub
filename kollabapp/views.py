@@ -10,8 +10,9 @@ from django.utils.html import strip_tags
 import logging
 import requests as http_requests
 import uuid
-from datetime import timedelta
+from datetime import datetime, timedelta
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 from pathlib import Path
 import uuid as _uuid
 from kollabapp.ai_assistant import get_response
@@ -78,6 +79,21 @@ def _categorise(mime: str) -> str:
     if mime.startswith('video/'):
         return 'video'
     return 'document'
+
+
+def _decode_cursor(cursor: str):
+    """Parse cursor tokens of the form ISO_TIMESTAMP|id."""
+    if not cursor:
+        return None, None
+    # Query string parsing may convert '+' into spaces when the cursor contains
+    # an ISO timestamp with a timezone offset like '+00:00'. Preserve that data.
+    cursor = cursor.strip().replace(' ', '+')
+    try:
+        created_at_str, pk_str = cursor.split('|', 1)
+        created_at = parse_datetime(created_at_str)
+        return created_at, int(pk_str)
+    except Exception:
+        return None, None
 
 
 def _detect_mime(file_obj) -> str:
@@ -799,107 +815,150 @@ def refresh_file_url(request, file_id):
 
 @login_required
 def messages_api(request, workspace_id):
-    """Return recent messages for a workspace as JSON.
+    """Return workspace messages for chat history with cursor pagination.
 
-    URL: /api/workspace/<workspace_id>/messages/?limit=100
+    URL: /api/workspace/<workspace_id>/messages/?limit=50&before=<cursor>
     """
-    # membership check
     if not WorkspaceMembership.objects.filter(user=request.user, workspace_id=workspace_id).exists():
         return JsonResponse({'error': 'not a member'}, status=403)
 
-    # Clean up old messages if retention policy is set
     workspace = get_object_or_404(Workspace, id=workspace_id)
     if workspace.message_retention_days:
-        from datetime import timedelta
-        from django.utils import timezone
         cutoff_date = timezone.now() - timedelta(days=workspace.message_retention_days)
         Message.objects.filter(workspace=workspace, created_at__lt=cutoff_date).delete()
 
-    # allow caller to limit number of messages (defaults to 100)
     try:
-        limit = int(request.GET.get('limit', 100))
-    except ValueError:
-        limit = 100
+        limit = int(request.GET.get('limit', 50))
+    except (ValueError, TypeError):
+        limit = 50
+    limit = max(10, min(limit, 100))
 
-    msgs = (
-        Message.objects.filter(workspace_id=workspace_id)
-        .prefetch_related('files')         
-        .order_by('created_at')[:limit]
+    before_cursor = request.GET.get('before')
+    cursor_created_at, cursor_id = _decode_cursor(before_cursor)
+
+    query = Message.objects.filter(workspace_id=workspace_id)
+    if cursor_created_at is not None and cursor_id is not None:
+        query = query.filter(
+            Q(created_at__lt=cursor_created_at) |
+            Q(created_at=cursor_created_at, id__lt=cursor_id)
+        )
+
+    msgs = list(
+        query.select_related('sender')
+             .prefetch_related('files')
+             .order_by('-created_at', '-id')[: limit + 1]
     )
 
-    # serialize in chronological order (oldest first)
+    has_more = len(msgs) > limit
+    msgs = list(reversed(msgs[:limit]))
+
+    next_cursor = None
+    if msgs:
+        first = msgs[0]
+        next_cursor = f"{first.created_at.isoformat()}|{first.id}"
+
     data = []
     for m in msgs:
         data.append({
-    'id':                   m.id,
-    'message_id':           str(m.message_uuid) if m.message_uuid else None,
-    'message':              m.message or '',
-    'sender_id':            m.sender.id if m.sender else None,
-    'sender_username':      m.sender.username if m.sender else None,
-    'sender_display_name':  getattr(m.sender, 'display_name', None) if m.sender else None,
-    'sender_avatar':        m.sender.profile_picture_url if (m.sender and m.sender.profile_picture) else '/static/Areeba.jpeg',
-    'created_at':           m.created_at.isoformat(),
-    'voice_url':            resolve_voice_url(request, m.voice_note) if m.voice_note else None,
-    'duration':             m.duration or 0,
-    # ── NEW: file attachments ─────────────────────────────────────────────
-    'files': [
-        {
-            'file_id':       f.id,
-            'file_url':      f.fresh_url(),
-            'original_name': f.original_name,
-            'mime_type':     f.mime_type,
-            'file_size':     f.file_size,
-            'file_category': f.file_category,
-        }
-        for f in m.files.all()
-    ],
-})
+            'id':                   m.id,
+            'message_id':           str(m.message_uuid) if m.message_uuid else None,
+            'message':              m.message or '',
+            'sender_id':            m.sender.id if m.sender else None,
+            'sender_username':      m.sender.username if m.sender else None,
+            'sender_display_name':  getattr(m.sender, 'display_name', None) if m.sender else None,
+            'sender_avatar':        m.sender.profile_picture_url if (m.sender and m.sender.profile_picture) else '/static/Areeba.jpeg',
+            'created_at':           m.created_at.isoformat(),
+            'voice_url':            resolve_voice_url(request, m.voice_note) if m.voice_note else None,
+            'duration':             m.duration or 0,
+            'files': [
+                {
+                    'file_id':       f.id,
+                    'file_url':      f.fresh_url(),
+                    'original_name': f.original_name,
+                    'mime_type':     f.mime_type,
+                    'file_size':     f.file_size,
+                    'file_category': f.file_category,
+                }
+                for f in m.files.all()
+            ],
+        })
 
-
-    return JsonResponse(data, safe=False)
+    return JsonResponse({
+        'messages': data,
+        'has_more': has_more,
+        'next_cursor': next_cursor,
+    })
 
 
 @login_required
 def direct_messages_api(request, workspace_id, user_id):
-
     if not WorkspaceMembership.objects.filter(
         user=request.user,
         workspace_id=workspace_id
     ).exists():
         return JsonResponse({"error": "not allowed"}, status=403)
 
-    messages = DirectMessage.objects.filter(
-        workspace_id=workspace_id
-    ).filter(
+    try:
+        limit = int(request.GET.get('limit', 50))
+    except (ValueError, TypeError):
+        limit = 50
+    limit = max(10, min(limit, 100))
+
+    before_cursor = request.GET.get('before')
+    cursor_created_at, cursor_id = _decode_cursor(before_cursor)
+
+    query = DirectMessage.objects.filter(workspace_id=workspace_id).filter(
         Q(sender=request.user, receiver_id=user_id) |
         Q(sender_id=user_id, receiver=request.user)
-    ).prefetch_related('files').order_by("created_at")
+    )
+    if cursor_created_at is not None and cursor_id is not None:
+        query = query.filter(
+            Q(created_at__lt=cursor_created_at) |
+            Q(created_at=cursor_created_at, id__lt=cursor_id)
+        )
+
+    msgs = list(
+        query.select_related('sender', 'receiver')
+             .prefetch_related('files')
+             .order_by('-created_at', '-id')[: limit + 1]
+    )
+
+    has_more = len(msgs) > limit
+    msgs = list(reversed(msgs[:limit]))
+
+    next_cursor = None
+    if msgs:
+        first = msgs[0]
+        next_cursor = f"{first.created_at.isoformat()}|{first.id}"
 
     data = []
+    for m in msgs:
+        data.append({
+            'id':         m.id,
+            'message':    m.message or '',
+            'sender_id':  m.sender_id,
+            'sender':     m.sender.username if m.sender else None,
+            'created_at': m.created_at.isoformat(),
+            'voice_url':  resolve_voice_url(request, m.voice_note) if m.voice_note else None,
+            'duration':   m.duration or 0,
+            'files': [
+                {
+                    'file_id':       f.id,
+                    'file_url':      f.fresh_url(),
+                    'original_name': f.original_name,
+                    'mime_type':     f.mime_type,
+                    'file_size':     f.file_size,
+                    'file_category': f.file_category,
+                }
+                for f in m.files.all()
+            ],
+        })
 
-    for m in messages:
-         data.append({
-        'id':        m.id,
-        'message':   m.message or '',
-        'sender_id': m.sender_id,
-        'sender':    m.sender.username,
-        'created_at': m.created_at.isoformat(),
-        'voice_url': resolve_voice_url(request, m.voice_note) if m.voice_note else None,
-        'duration':  m.duration or 0,
-        'files': [
-            {
-                'file_id':       f.id,
-                'file_url':      f.fresh_url(),
-                'original_name': f.original_name,
-                'mime_type':     f.mime_type,
-                'file_size':     f.file_size,
-                'file_category': f.file_category,
-            }
-            for f in m.files.all()
-        ],
+    return JsonResponse({
+        'messages': data,
+        'has_more': has_more,
+        'next_cursor': next_cursor,
     })
-
-    return JsonResponse(data, safe=False)
 
 @login_required
 def send_dm(request, workspace_id):
@@ -3092,32 +3151,6 @@ def ai_chat_legacy(request):
 
     return JsonResponse({'error': 'Workspace ID required for legacy AI endpoint.'}, status=400)
 
-
-def ai(request, workspace_id):
-    membership = WorkspaceMembership.objects.filter(
-        user=request.user, workspace_id=workspace_id
-    ).first()
-
-    if not membership:
-        messages.error(request, "You are not part of this workspace.")
-        return redirect("workspace")
-
-    workspace = membership.workspace
-    members = WorkspaceMembership.objects.filter(
-        workspace=workspace
-    ).select_related("user")
-    dm_members = members.exclude(user=request.user)
-    notification_counts = _get_notification_counts(workspace, request.user)
-
-    return render(request, 'ai.html', {
-        'workspace': workspace,
-        'members': members,
-        'dm_members': dm_members,
-        'notification_counts': notification_counts,
-        'notification_counts_json': json.dumps(notification_counts),
-        'is_ai_page': True,
-        'base_template': 'base_layout.html',
-    })
 
 @login_required
 def ai_history(request, workspace_id):

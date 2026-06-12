@@ -1,6 +1,7 @@
 from django.test import TestCase, override_settings
 from channels.db import database_sync_to_async
 from django.urls import reverse
+from urllib.parse import quote_plus
 
 from .models import CustomUser, Workspace, WorkspaceMembership
 
@@ -183,7 +184,9 @@ class WorkspaceJoinTests(TestCase):
         # no messages yet
         resp = self.client.get(reverse("messages_api", args=[self.public_ws.id]))
         self.assertEqual(resp.status_code, 200)
-        self.assertEqual(resp.json(), [])
+        data = resp.json()
+        self.assertEqual(data["messages"], [])
+        self.assertFalse(data["has_more"])
 
         # add some messages and request again
         from .models import Message
@@ -192,16 +195,77 @@ class WorkspaceJoinTests(TestCase):
         resp = self.client.get(reverse("messages_api", args=[self.public_ws.id]))
         self.assertEqual(resp.status_code, 200)
         data = resp.json()
-        self.assertEqual(len(data), 2)
+        self.assertEqual(len(data["messages"]), 2)
+        self.assertFalse(data["has_more"])
         # ensure order is chronological (first message first)
-        self.assertEqual(data[0]["message"], "hello")
-        self.assertEqual(data[1]["message"], "world")
+        self.assertEqual(data["messages"][0]["message"], "hello")
+        self.assertEqual(data["messages"][1]["message"], "world")
 
         # another user who is not a member should get 403
         other = CustomUser.objects.create_user(username="other", password="pass")
         self.client.login(username="other", password="pass")
         resp = self.client.get(reverse("messages_api", args=[self.public_ws.id]))
         self.assertEqual(resp.status_code, 403)
+
+    def test_messages_api_cursor_pagination_returns_older_messages(self):
+        self.login()
+        from .models import Message
+        messages = []
+        for i in range(55):
+            messages.append(Message.objects.create(
+                workspace=self.public_ws,
+                sender=self.admin if i % 2 == 0 else self.user,
+                message=f"msg-{i:02d}"
+            ))
+
+        resp = self.client.get(reverse("messages_api", args=[self.public_ws.id]))
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(len(data["messages"]), 50)
+        self.assertTrue(data["has_more"])
+        self.assertIsNotNone(data["next_cursor"])
+        self.assertEqual(data["messages"][0]["message"], "msg-05")
+        self.assertEqual(data["messages"][-1]["message"], "msg-54")
+
+        resp2 = self.client.get(reverse("messages_api", args=[self.public_ws.id]) + f"?limit=10&before={quote_plus(data['next_cursor'])}")
+        self.assertEqual(resp2.status_code, 200)
+        data2 = resp2.json()
+        self.assertEqual(len(data2["messages"]), 5)
+        self.assertFalse(data2["has_more"])
+        self.assertEqual(data2["messages"][0]["message"], "msg-00")
+
+    def test_direct_messages_api_cursor_pagination_returns_old_dms(self):
+        self.login()
+        other = CustomUser.objects.create_user(username="otherdm", password="pass", email="otherdm@example.com")
+        WorkspaceMembership.objects.create(workspace=self.public_ws, user=other, role="member")
+        from .models import DirectMessage
+        for i in range(53):
+            if i % 2 == 0:
+                sender = self.user
+                receiver = other
+            else:
+                sender = other
+                receiver = self.user
+            DirectMessage.objects.create(
+                workspace=self.public_ws,
+                sender=sender,
+                receiver=receiver,
+                message=f"dm-{i:02d}"
+            )
+
+        resp = self.client.get(reverse("direct_messages_api", args=[self.public_ws.id, other.id]))
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(len(data["messages"]), 50)
+        self.assertTrue(data["has_more"])
+        self.assertEqual(data["messages"][-1]["message"], "dm-52")
+
+        resp2 = self.client.get(reverse("direct_messages_api", args=[self.public_ws.id, other.id]) + f"?limit=10&before={quote_plus(data['next_cursor'])}")
+        self.assertEqual(resp2.status_code, 200)
+        data2 = resp2.json()
+        self.assertEqual(len(data2["messages"]), 3)
+        self.assertFalse(data2["has_more"])
+        self.assertEqual(data2["messages"][0]["message"], "dm-00")
 
     def test_update_profile_view_saves_fields(self):
         self.login()
