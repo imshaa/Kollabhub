@@ -462,3 +462,105 @@
   .call-action-btn { width: 34px; height: 34px; }
   .call-modal-end-btn { padding: 6px 10px; font-size: .74rem; }
 }
+
+/* ── Active Call Header Indicator ────────────────────────────────────────── */
+.active-call-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(34, 197, 94, 0.1);
+  border: 1px solid rgba(34, 197, 94, 0.35);
+  border-radius: 20px;
+  padding: 4px 10px 4px 6px;
+  margin-right: 6px;
+  animation: indicatorFadeIn 0.3s ease;
+}
+
+@keyframes indicatorFadeIn {
+  from { opacity: 0; transform: scale(0.9); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+.active-call-avatars {
+  display: flex;
+  align-items: center;
+}
+
+.call-ind-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #22c55e, #16a34a);
+  color: #fff;
+  font-size: 0.6rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid rgba(255,255,255,0.15);
+}
+
+.active-call-label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #22c55e;
+  white-space: nowrap;
+}
+
+.live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #22c55e;
+  animation: liveDotPulse 1.2s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+@keyframes liveDotPulse {
+  0%, 100% { opacity: 1; transform: scale(1);   }
+  50%       { opacity: 0.4; transform: scale(0.7); }
+}
+
+.active-call-join-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: #22c55e;
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  padding: 3px 9px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+  white-space: nowrap;
+}
+
+.active-call-join-btn:hover {
+  background: #16a34a;
+  transform: scale(1.04);
+}
+
+/* Mobile: compact indicator */
+@media (max-width: 640px) {
+  .active-call-indicator {
+    padding: 3px 8px 3px 5px;
+    gap: 4px;
+  }
+  .call-ind-avatar {
+    width: 20px;
+    height: 20px;
+    font-size: 0.55rem;
+  }
+  .active-call-label {
+    font-size: 0.65rem;
+  }
+  .active-call-join-btn {
+    font-size: 0.65rem;
+    padding: 2px 7px;
+  }
+}

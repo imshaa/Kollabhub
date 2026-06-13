@@ -1264,39 +1264,35 @@ def _check_daily_room_exists(room_name):
     return None
  
 # ── Call API views ────────────────────────────────────────────────
- 
+
 @login_required
 def active_call(request, workspace_id):
-    """
-    GET /api/workspace/<workspace_id>/call/active/
-    Returns the currently active call for this workspace, or {active: false}.
-    Used by clients on page-load to show the persistent call banner if a call
-    is already in progress when they arrive.
-    """
     if not WorkspaceMembership.objects.filter(
         user=request.user, workspace_id=workspace_id
     ).exists():
         return JsonResponse({'error': 'not a member'}, status=403)
- 
+
     call = WorkspaceCall.objects.filter(
         workspace_id=workspace_id, is_active=True
     ).select_related('initiated_by').first()
- 
+
     if not call:
         return JsonResponse({'active': False})
- 
+
+    # Always verify the Daily room still exists — cleans up stale DB records
     room_status = _check_daily_room_exists(call.room_name)
     if room_status is False:
+        # Room is gone — mark DB record as ended so it never appears again
         call.is_active = False
-        call.ended_at = timezone.now()
+        call.ended_at  = timezone.now()
         call.save(update_fields=['is_active', 'ended_at'])
         return JsonResponse({'active': False})
- 
+
     display_name = (
         getattr(call.initiated_by, 'display_name', None)
         or (call.initiated_by.username if call.initiated_by else 'Someone')
     )
- 
+
     return JsonResponse({
         'active':      True,
         'call_id':     call.id,
@@ -1304,8 +1300,8 @@ def active_call(request, workspace_id):
         'caller_id':   call.initiated_by_id,
         'caller_name': display_name,
         'room_url':    call.room_url,
-    })
-   
+    }) 
+ 
 @login_required
 def start_call(request, workspace_id):
     if request.method != 'POST':
@@ -1423,33 +1419,41 @@ def join_call(request, workspace_id, call_id):
         'call_type': call.call_type,
     })
  
- 
 @login_required
 def end_call(request, workspace_id, call_id):
     if request.method != 'POST':
         return JsonResponse({'success': False, 'error': 'POST required'}, status=405)
- 
+
     membership = WorkspaceMembership.objects.filter(
         user=request.user, workspace_id=workspace_id
     ).first()
     if not membership:
         return JsonResponse({'success': False, 'error': 'Not a member'}, status=403)
- 
+
+    # Only the initiator can end the call
     call = WorkspaceCall.objects.filter(
         id=call_id, workspace_id=workspace_id, is_active=True
     ).first()
     if not call:
-        return JsonResponse({'success': False, 'error': 'Call not found'}, status=404)
- 
+        return JsonResponse({'success': True})  # already ended — idempotent
+
+    # Verify that only the initiator can end the call
+    if call.initiated_by_id != request.user.id:
+        return JsonResponse(
+            {'success': False, 'error': 'Only the call initiator can end the call'}, 
+            status=403
+        )
+
+    # Mark ended in DB first so page reloads immediately stop showing the call
     call.is_active = False
     call.ended_at  = timezone.now()
     call.save(update_fields=['is_active', 'ended_at'])
- 
+
+    # Delete the Daily room — this makes it unreachable immediately
     _delete_daily_room(call.room_name)
- 
+
+    # Broadcast call_ended to all workspace members via WebSocket
     try:
-        from channels.layers import get_channel_layer
-        from asgiref.sync import async_to_sync
         channel_layer = get_channel_layer()
         async_to_sync(channel_layer.group_send)(
             f'workspace_{workspace_id}',
@@ -1463,9 +1467,8 @@ def end_call(request, workspace_id, call_id):
         )
     except Exception as exc:
         logger.warning(f'end_call WS broadcast failed (non-fatal): {exc}')
- 
+
     return JsonResponse({'success': True})
- 
  
 @login_required
 def decline_call(request, workspace_id, call_id):
@@ -1474,7 +1477,6 @@ def decline_call(request, workspace_id, call_id):
     return JsonResponse({'success': True})
 
 # -----------------------Chat page Settings Logic---------------------------------
-
 
 #  ----------------------- Danger Zone Tab Logic ------------------------------------------
 # Delete workspace (admin only)

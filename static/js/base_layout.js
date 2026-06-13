@@ -5,6 +5,18 @@
   window.currentWorkspaceId          = _d.workspaceId  || null;
   window.currentUserId               = _d.userId        || null;
   window.INITIAL_NOTIFICATION_COUNTS = _d.notificationCounts || null;
+  window.WORKSPACE_MEMBER_MAP        = window.WORKSPACE_MEMBER_MAP || {};
+  if (Array.isArray(_d.members)) {
+    _d.members.forEach(function(member) {
+      if (!member || !member.id) return;
+      if (member.username) {
+        window.WORKSPACE_MEMBER_MAP[member.username] = member.id;
+      }
+      if (member.displayName) {
+        window.WORKSPACE_MEMBER_MAP[member.displayName] = member.id;
+      }
+    });
+  }
 })();
 
 /* ── AI Panel ──────────────────────────────────────────────────────────────── */

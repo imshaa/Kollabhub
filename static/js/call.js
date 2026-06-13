@@ -1,9 +1,6 @@
-
 /* ══════════════════════════════════════════════════════════════════════════
    PART A — WebSocket constructor intercept
-   Captures the chatSocket object the moment chatui.js creates it,
-   so we can attach our own addEventListener without any polling.
-   ══════════════════════════════════════════════════════════════════════════ */
+══════════════════════════════════════════════════════════════════════════ */
 (function _interceptWebSocket() {
   const _NativeWebSocket = window.WebSocket;
   let   _captured        = false;
@@ -13,28 +10,20 @@
       ? new _NativeWebSocket(url, protocols)
       : new _NativeWebSocket(url);
 
-    // Only intercept the chat socket (url contains /ws/chat/)
     if (!_captured && url && url.includes('/ws/chat/')) {
       _captured = true;
-      // Restore native constructor immediately so nothing else is affected
       window.WebSocket = _NativeWebSocket;
-
-      // Attach our listener to this exact socket object
-      sock.addEventListener('message', function _callSignalListener(e) {
+      sock.addEventListener('message', function(e) {
         let d;
         try { d = JSON.parse(e.data); } catch { return; }
         if (d && d.type === 'call_signal' && window.__handleCallSignal) {
           window.__handleCallSignal(d);
         }
       });
-
-      console.log('[Call] WebSocket intercepted — call signal listener attached ✓');
     }
-
     return sock;
   };
 
-  // Copy static properties (CONNECTING, OPEN, CLOSED, etc.) so nothing breaks
   Object.keys(_NativeWebSocket).forEach(k => {
     try { window.WebSocket[k] = _NativeWebSocket[k]; } catch {}
   });
@@ -43,40 +32,38 @@
 
 
 /* ══════════════════════════════════════════════════════════════════════════
-   PART B — call signal handler (registered synchronously on window)
-   ══════════════════════════════════════════════════════════════════════════ */
+   PART B — State and DOM refs
+══════════════════════════════════════════════════════════════════════════ */
 
-/* ── Read workspace / user from DOM ──────────────────────────────────────── */
 const _ma    = document.getElementById('messagesArea');
 const _WS_ID = _ma?.dataset?.workspaceId || '';
 const _UID   = parseInt(_ma?.dataset?.userId || '0', 10);
 
-/* ── Internal state ──────────────────────────────────────────────────────── */
 const _call = {
-  id:         null,
-  type:       null,
-  roomUrl:    null,
-  token:      null,
-  callObj:    null,
-  iframe:     null,
-  active:     false,
-  iInitiated: false,
+  id: null, type: null, roomUrl: null, token: null,
+  callObj: null, iframe: null, active: false, iInitiated: false,
 };
 
-const _banner = {
-  callId:    null,
-  callType:  null,
-  callerName:null,
-  callerId:  null,
-  autoTimer: null,
+// Tracks the current live call shown in header indicator
+const _liveCall = {
+  id: null, type: null, callerName: null, callerId: null,
 };
 
-/* ── DOM refs ────────────────────────────────────────────────────────────── */
-const _modal      = document.getElementById('callModal');
-const _frameWrap  = document.getElementById('callFrameWrap');
-const _connecting = document.getElementById('callConnectingMsg');
-const _endBtn     = document.getElementById('callEndBtn');
-const _titleText  = document.getElementById('callModalTitleText');
+// Per-session declined set — user won't get re-notified for calls they declined
+const _declinedCallIds = new Set();
+
+const _modal       = document.getElementById('callModal');
+const _frameWrap   = document.getElementById('callFrameWrap');
+const _connecting  = document.getElementById('callConnectingMsg');
+const _endBtn      = document.getElementById('callEndBtn');
+const _titleText   = document.getElementById('callModalTitleText');
+
+// Header indicator elements
+const _indicator     = document.getElementById('activeCallIndicator');
+const _indicatorJoin = document.getElementById('activeCallJoinBtn');
+const _indicatorAvatars = document.getElementById('activeCallAvatars');
+
+// Old banner elements (kept for incoming notification only — auto-dismiss after 12s)
 const _bannerEl   = document.getElementById('incomingCallBanner');
 const _bannerName = document.getElementById('incomingCallerName');
 const _bannerLbl  = document.getElementById('incomingCallLabel');
@@ -84,26 +71,160 @@ const _bannerAv   = document.getElementById('incomingCallerAvatar');
 const _acceptBtn  = document.getElementById('incomingAcceptBtn');
 const _declineBtn = document.getElementById('incomingDeclineBtn');
 
-/* ── Signal handler — registered on window so chatui.js can also call it ── */
+let _bannerTimer = null;
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   PART C — Signal handler
+══════════════════════════════════════════════════════════════════════════ */
 window.__handleCallSignal = function(data) {
   if (data.type !== 'call_signal') return;
   const { signal, call_id, call_type, caller_id, caller_name } = data;
 
-  console.log('[Call] ▶ signal received:', signal, 'call_id:', call_id, 'from:', caller_name);
-
   if (signal === 'incoming_call') {
-    if (caller_id === _UID) return;   // we started it — already in the modal
-    if (_call.active)       return;   // already in a call
-    _showBanner(call_id, call_type, caller_name, caller_id, false);
+    if (caller_id === _UID) return;
+    if (_call.active)       return;
+
+    // Always show indicator first — this is the persistent state
+    _showIndicator(call_id, call_type, caller_name, caller_id);
+
+    // Only popup if not declined before
+    if (!_declinedCallIds.has(call_id)) {
+      // Small delay ensures indicator renders before banner animates in
+      setTimeout(() => _showIncomingBanner(call_id, call_type, caller_name), 50);
+    }
   }
 
   else if (signal === 'call_ended') {
-    _hideBanner(true);
+    _hideIncomingBanner();
+    _hideIndicator();
     if (_call.active) _teardownLocal();
   }
 };
+// window.__handleCallSignal = function(data) {
+//   if (data.type !== 'call_signal') return;
+//   const { signal, call_id, call_type, caller_id, caller_name } = data;
 
-/* ── Button wiring ───────────────────────────────────────────────────────── */
+//   if (signal === 'incoming_call') {
+//     if (caller_id === _UID) return;   // we started it
+//     if (_call.active)       return;   // already in a call
+
+//     // Show header indicator regardless
+//     _showIndicator(call_id, call_type, caller_name, caller_id);
+
+//     // Only show the popup banner if not already declined this call
+//     if (!_declinedCallIds.has(call_id)) {
+//       _showIncomingBanner(call_id, call_type, caller_name);
+//     }
+//   }
+
+//   else if (signal === 'call_ended') {
+//     _hideIncomingBanner();
+//     _hideIndicator();
+//     if (_call.active) _teardownLocal();
+//   }
+// };
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   PART D — Header call indicator (persists until call ends)
+══════════════════════════════════════════════════════════════════════════ */
+
+function _showIndicator(callId, callType, callerName, callerId) {
+  Object.assign(_liveCall, { id: callId, type: callType, callerName, callerId });
+
+  // Show caller initials avatar
+  if (_indicatorAvatars) {
+    _indicatorAvatars.innerHTML = `
+      <div class="call-ind-avatar" title="${callerName || 'Someone'}">
+        ${_initials(callerName || '?')}
+      </div>`;
+  }
+
+  if (_indicator) _indicator.style.display = 'flex';
+}
+
+function _hideIndicator() {
+  Object.assign(_liveCall, { id: null, type: null, callerName: null, callerId: null });
+  if (_indicator) _indicator.style.display = 'none';
+  if (_indicatorAvatars) _indicatorAvatars.innerHTML = '';
+}
+
+// Wire the Join button in the header indicator
+_indicatorJoin?.addEventListener('click', () => {
+  if (_liveCall.id) _acceptCallById(_liveCall.id, _liveCall.type);
+});
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   PART E — Incoming banner (popup, auto-dismisses in 12s)
+══════════════════════════════════════════════════════════════════════════ */
+
+function _showIncomingBanner(callId, callType, callerName) {
+  clearTimeout(_bannerTimer);
+
+  if (_bannerName) _bannerName.textContent = callerName || 'Someone';
+  if (_bannerAv)   _bannerAv.textContent   = _initials(callerName || '?');
+  if (_bannerLbl)  _bannerLbl.textContent  =
+    (callType === 'voice' ? '📞' : '📹') + ' is calling…';
+
+  // Reset banner to incoming style (not live/persistent)
+  if (_bannerEl) {
+    _bannerEl.classList.remove('call-live');
+    _bannerEl.querySelector('.call-live-pill')?.remove();
+    _bannerEl.style.display = '';
+    _bannerEl.dataset.callId = callId;
+  }
+  if (_declineBtn) _declineBtn.style.display = '';
+  if (_acceptBtn)  {
+    _acceptBtn.title            = 'Accept';
+    _acceptBtn.innerHTML        = _phoneIcon();
+    _acceptBtn.style.background = '#22c55e';
+  }
+
+  // Auto-dismiss after 12 seconds — user still sees the header indicator
+  _bannerTimer = setTimeout(() => _hideIncomingBanner(), 12000);
+}
+
+function _hideIncomingBanner() {
+  clearTimeout(_bannerTimer);
+  _bannerTimer = null;
+  if (_bannerEl) _bannerEl.style.display = 'none';
+}
+
+_acceptBtn?.addEventListener('click', () => {
+  const callId = _bannerEl?.dataset?.callId;
+  _hideIncomingBanner();
+  if (callId) _acceptCallById(callId, _liveCall.type);
+});
+
+_declineBtn?.addEventListener('click', () => {
+  const callId = _bannerEl?.dataset?.callId;
+  _hideIncomingBanner();
+  if (callId) {
+    _declinedCallIds.add(callId);
+    _declineCallApi(callId);
+  }
+  // Explicitly re-show indicator in case it was hidden or not yet rendered
+  if (_liveCall.id) {
+    _showIndicator(_liveCall.id, _liveCall.type, _liveCall.callerName, _liveCall.callerId);
+  }
+});
+// _declineBtn?.addEventListener('click', () => {
+//   const callId = _bannerEl?.dataset?.callId;
+//   _hideIncomingBanner();
+//   if (callId) {
+//     _declinedCallIds.add(callId);  // suppress future popups for this call
+//     _declineCallApi(callId);
+//   }
+//   // Header indicator stays visible so they can join later
+// });
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   PART F — Button wiring
+══════════════════════════════════════════════════════════════════════════ */
+
 document.querySelector('.icon-btn[title="Call"]')
   ?.addEventListener('click', () => _initiateCall('voice'));
 document.querySelector('.icon-btn[title="Video"]')
@@ -113,26 +234,41 @@ _endBtn?.addEventListener('click', () => {
   _call.iInitiated ? _endCallForEveryone() : _leaveCallLocally();
 });
 
-_acceptBtn?.addEventListener('click',  _acceptCall);
-_declineBtn?.addEventListener('click', _declineBanner);
-
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape' && _modal?.style.display !== 'none') {
     _call.iInitiated ? _endCallForEveryone() : _leaveCallLocally();
   }
 });
 
-/* ── Page-load: show banner if call already active ───────────────────────── */
-// Use DOMContentLoaded — by this point the DOM is ready but call.js
-// may have loaded before or after it fires, so guard both cases.
+
+/* ══════════════════════════════════════════════════════════════════════════
+   PART G — Page-load: check for active call
+══════════════════════════════════════════════════════════════════════════ */
 function _checkActiveCall() {
   if (!_WS_ID) return;
   fetch(`/api/workspace/${_WS_ID}/call/active/`, { credentials: 'same-origin' })
     .then(r => r.json())
     .then(d => {
       if (d.active && !_call.active) {
-        console.log('[Call] Active call on page load:', d);
-        _showBanner(d.call_id, d.call_type, d.caller_name, d.caller_id, true);
+        // Always show indicator on page load — no banner, just the header pill
+        _showIndicator(d.call_id, d.call_type, d.caller_name, d.caller_id);
+        
+        // Restore initiator state: if current user is the caller, they can end the call
+        const isInitiator = (d.caller_id === _UID);
+        Object.assign(_call, {
+          id: d.call_id,
+          type: d.call_type,
+          active: false,  // not in the call yet, just seeing the indicator
+          iInitiated: isInitiator,
+        });
+        
+        // Update end button hint for when they join
+        if (_endBtn) {
+          _endBtn.innerHTML = isInitiator ? `${_phoneIconEnd()} End Call` : `${_phoneIconEnd()} Leave Call`;
+          isInitiator ? _endBtn.classList.remove('leave-mode') : _endBtn.classList.add('leave-mode');
+        }
+        
+        // Do NOT show the popup banner on page load — indicator is enough
       }
     })
     .catch(e => console.warn('[Call] active-call check failed:', e));
@@ -141,84 +277,19 @@ function _checkActiveCall() {
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', _checkActiveCall);
 } else {
-  _checkActiveCall(); // DOM already ready
+  _checkActiveCall();
 }
 
-/* ═══════════════════════════════════════════════════════════════════════════
-   BANNER
-   ═══════════════════════════════════════════════════════════════════════════ */
-function _showBanner(callId, callType, callerName, callerId, persistent) {
-  clearTimeout(_banner.autoTimer);
-  _banner.autoTimer = null;
-  Object.assign(_banner, { callId, callType, callerName, callerId });
 
-  if (_bannerName) _bannerName.textContent = callerName || 'Someone';
-  if (_bannerAv)   _bannerAv.textContent   = _initials(callerName || '?');
-  if (_bannerLbl)  _bannerLbl.textContent  =
-    (callType === 'voice' ? '📞' : '📹') +
-    (persistent ? ' call in progress' : ' is calling…');
+/* ══════════════════════════════════════════════════════════════════════════
+   PART H — Initiate / accept / end / leave
+══════════════════════════════════════════════════════════════════════════ */
 
-  if (_acceptBtn) {
-    _acceptBtn.title             = persistent ? 'Join call' : 'Accept';
-    _acceptBtn.innerHTML         = _phoneIcon();
-    _acceptBtn.style.background  = '#22c55e';
-  }
-  if (_declineBtn) {
-    _declineBtn.style.display = persistent ? 'none' : '';
-  }
-
-  if (_bannerEl) {
-    _bannerEl.style.display = '';
-    if (persistent) {
-      _bannerEl.classList.add('call-live');
-      if (!_bannerEl.querySelector('.call-live-pill')) {
-        const pill = document.createElement('span');
-        pill.className   = 'call-live-pill';
-        pill.textContent = 'Live';
-        _bannerLbl?.insertAdjacentElement('afterend', pill);
-      }
-    } else {
-      _bannerEl.classList.remove('call-live');
-      _bannerEl.querySelector('.call-live-pill')?.remove();
-    }
-  }
-
-  if (!persistent) {
-    _banner.autoTimer = setTimeout(() => _hideBanner(false), 35_000);
-  }
-}
-
-function _hideBanner(force) {
-  clearTimeout(_banner.autoTimer);
-  _banner.autoTimer = null;
-  if (_bannerEl) {
-    _bannerEl.style.display = 'none';
-    _bannerEl.classList.remove('call-live');
-    _bannerEl.querySelector('.call-live-pill')?.remove();
-  }
-  if (!force) return;
-  Object.assign(_banner, { callId:null, callType:null, callerName:null, callerId:null });
-}
-
-async function _declineBanner() {
-  const id = _banner.callId;
-  _hideBanner(true);
-  if (!id) return;
-  try {
-    await fetch(`/api/workspace/${_WS_ID}/call/${id}/decline/`, {
-      method: 'POST', headers: { 'X-CSRFToken': _csrf() }, credentials: 'same-origin',
-    });
-  } catch {}
-}
-
-/* ═══════════════════════════════════════════════════════════════════════════
-   INITIATE / ACCEPT / END / LEAVE
-   ═══════════════════════════════════════════════════════════════════════════ */
 async function _initiateCall(callType) {
-  if (!_WS_ID)     { _toast('Workspace ID missing — refresh and try again.'); return; }
+  if (!_WS_ID)      { _toast('Workspace ID missing — refresh and try again.'); return; }
   if (_call.active) { _toast('You are already in a call.'); return; }
 
-  _openModal(callType, false);
+  _openModal(callType);
 
   try {
     const resp = await fetch(`/api/workspace/${_WS_ID}/call/start/`, {
@@ -238,7 +309,10 @@ async function _initiateCall(callType) {
       roomUrl: data.room_url, token: data.token,
       active: true, iInitiated: true,
     });
-    if (_endBtn) { _endBtn.innerHTML = `${_phoneIconEnd()} End Call`; _endBtn.classList.remove('leave-mode'); }
+    if (_endBtn) {
+      _endBtn.innerHTML = `${_phoneIconEnd()} End Call`;
+      _endBtn.classList.remove('leave-mode');
+    }
     _launchFrame(data.room_url, data.token);
   } catch (err) {
     console.error('[Call] _initiateCall error:', err);
@@ -247,13 +321,11 @@ async function _initiateCall(callType) {
   }
 }
 
-async function _acceptCall() {
-  if (_call.active) { _toast('Already in a call.'); _hideBanner(true); return; }
-  const callId = _banner.callId, callType = _banner.callType;
-  _hideBanner(true);
-  if (!callId) { _toast('Call no longer available.'); return; }
+async function _acceptCallById(callId, callType) {
+  if (_call.active) { _toast('Already in a call.'); return; }
+  if (!callId)      { _toast('Call no longer available.'); return; }
 
-  _openModal(callType, true);
+  _openModal(callType || 'video');
 
   try {
     const resp = await fetch(`/api/workspace/${_WS_ID}/call/${callId}/join/`, {
@@ -267,12 +339,24 @@ async function _acceptCall() {
       _toast(data.error || 'Could not join call — it may have ended.');
       return;
     }
+    
+    // Preserve initiator state if already set (e.g., after page refresh)
+    const wasInitiator = _call.iInitiated;
+    
     Object.assign(_call, {
       id: data.call_id, type: data.call_type,
       roomUrl: data.room_url, token: data.token,
-      active: true, iInitiated: false,
+      active: true, iInitiated: wasInitiator,  // preserve initiator state
     });
-    if (_endBtn) { _endBtn.innerHTML = `${_phoneIconEnd()} Leave Call`; _endBtn.classList.add('leave-mode'); }
+    if (_endBtn) {
+      if (wasInitiator) {
+        _endBtn.innerHTML = `${_phoneIconEnd()} End Call`;
+        _endBtn.classList.remove('leave-mode');
+      } else {
+        _endBtn.innerHTML = `${_phoneIconEnd()} Leave Call`;
+        _endBtn.classList.add('leave-mode');
+      }
+    }
     _launchFrame(data.room_url, data.token);
   } catch (err) {
     console.error('[Call] _acceptCall error:', err);
@@ -284,6 +368,7 @@ async function _acceptCall() {
 async function _endCallForEveryone() {
   const id = _call.id;
   _teardownLocal();
+  _hideIndicator();
   if (!id) return;
   try {
     await fetch(`/api/workspace/${_WS_ID}/call/${id}/end/`, {
@@ -298,20 +383,30 @@ async function _endCallForEveryone() {
 
 function _leaveCallLocally() {
   _teardownLocal();
-  // No API call — room stays alive for others
+  // Room stays alive for others — indicator stays visible
 }
 
-/* ═══════════════════════════════════════════════════════════════════════════
-   DAILY.CO FRAME
-   ═══════════════════════════════════════════════════════════════════════════ */
+async function _declineCallApi(callId) {
+  try {
+    await fetch(`/api/workspace/${_WS_ID}/call/${callId}/decline/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': _csrf() },
+      credentials: 'same-origin',
+    });
+  } catch {}
+}
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   PART I — Daily.co frame (unchanged logic)
+══════════════════════════════════════════════════════════════════════════ */
+
 function _launchFrame(roomUrl, token) {
   _destroyFrame();
 
   const DailySDK = window.DailyIframe || window.Daily;
-  console.log('[Call] Launching | SDK:', !!DailySDK, '| url:', roomUrl);
 
   if (!DailySDK) {
-    console.warn('[Call] No Daily SDK — plain iframe fallback');
     _iframeFallback(roomUrl, token);
     return;
   }
@@ -330,7 +425,6 @@ function _launchFrame(roomUrl, token) {
   try {
     callObj = DailySDK.wrap(iframe, { showLeaveButton: false, showFullscreenButton: true });
   } catch (err) {
-    console.error('[Call] DailySDK.wrap failed:', err);
     _iframeFallback(roomUrl, token);
     return;
   }
@@ -339,11 +433,9 @@ function _launchFrame(roomUrl, token) {
   callObj
     .on('joining-meeting', () => { if (_connecting) _connecting.style.display = 'none'; })
     .on('joined-meeting',  () => { if (_connecting) _connecting.style.display = 'none'; })
-    .on('left-meeting',    () => { _leaveCallLocally(); })   // NEVER end for all
+    .on('left-meeting',    () => { _leaveCallLocally(); })
     .on('error', err => {
-      const msg = err?.errorMsg || err?.details || err?.error || JSON.stringify(err);
-      console.error('[Call] Daily error:', msg);
-      _toast('Call error: ' + msg);
+      _toast('Call error: ' + (err?.errorMsg || JSON.stringify(err)));
       _teardownLocal();
     });
 
@@ -353,15 +445,9 @@ function _launchFrame(roomUrl, token) {
   callObj.join(joinParams)
     .then(() => console.log('[Call] join() ✓'))
     .catch(err => {
-      const msg = err?.errorMsg || err?.details || err?.error || err?.message || JSON.stringify(err);
-      console.error('[Call] join() failed:', msg);
-
-      const tokenIssue = msg && (
-        msg.includes('token') || msg.includes('auth') ||
-        msg.includes('401')   || msg.includes('403')
-      );
+      const msg = err?.errorMsg || err?.details || err?.message || JSON.stringify(err);
+      const tokenIssue = msg && (msg.includes('token') || msg.includes('auth') || msg.includes('401') || msg.includes('403'));
       if (token && tokenIssue) {
-        console.warn('[Call] Token rejected — retrying without token');
         callObj.join({ url: roomUrl })
           .then(() => console.log('[Call] Public join ✓'))
           .catch(e2 => { _toast('Could not connect: ' + JSON.stringify(e2)); _teardownLocal(); });
@@ -403,12 +489,11 @@ function _teardownLocal() {
   _closeModal();
 }
 
-/* ── Modal ───────────────────────────────────────────────────────────────── */
-function _openModal(callType, isJoining) {
-  if (!_modal) { console.error('[Call] #callModal not found'); return; }
+function _openModal(callType) {
+  if (!_modal) return;
   if (_titleText)  _titleText.textContent    = callType === 'voice' ? 'Voice Call' : 'Video Call';
   if (_connecting) _connecting.style.display = 'flex';
-  _modal.style.display        = 'flex';
+  _modal.style.display         = 'flex';
   document.body.style.overflow = 'hidden';
 }
 
@@ -418,7 +503,11 @@ function _closeModal() {
   document.body.style.overflow = '';
 }
 
-/* ── Utilities ───────────────────────────────────────────────────────────── */
+
+/* ══════════════════════════════════════════════════════════════════════════
+   PART J — Utilities
+══════════════════════════════════════════════════════════════════════════ */
+
 function _initials(n) {
   return (n || '?').split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
 }
@@ -446,18 +535,10 @@ function _toast(msg) {
   setTimeout(() => { t.style.opacity = '0'; setTimeout(() => t.remove(), 250); }, 5000);
 }
 function _phoneIcon() {
-  return `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-    <path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4
-      1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4
-      1-1 1-9.4 0-17-7.6-17-17 0-.6.4-1 1-1h3.5c.6 0 1
-      .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1L6.6 10.8z"/></svg>`;
+  return `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1-9.4 0-17-7.6-17-17 0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1L6.6 10.8z"/></svg>`;
 }
 function _phoneIconEnd() {
-  return `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-    <path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4
-      1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4
-      1-1 1-9.4 0-17-7.6-17-17 0-.6.4-1 1-1h3.5c.6 0 1
-      .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1L6.6 10.8z"/></svg>`;
+  return `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1-9.4 0-17-7.6-17-17 0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1L6.6 10.8z"/></svg>`;
 }
 
-console.log('[Call] v3 ready | workspace:', _WS_ID, '| user:', _UID, '| SDK:', !!(window.DailyIframe || window.Daily));
+console.log('[Call] v4 ready | workspace:', _WS_ID, '| user:', _UID);

@@ -8,7 +8,6 @@
   <!-- CSS Style Sheet -->
   <link rel="stylesheet" href="{% static 'css/base_layout.css' %}"/>
   <link rel="stylesheet" href="{% static 'css/chat.css' %}"/>
-  <link rel="stylesheet" href="{% static 'css/notifications.css' %}"/>
   {% block extra_css %}{% endblock %}
 </head>
 <body>
@@ -301,15 +300,13 @@
 {
   "workspaceId": {% if workspace %}{{ workspace.id }}{% else %}null{% endif %},
   "userId": {{ request.user.id|default:"null" }},
-  "notificationCounts": {% if notification_counts_json %}{{ notification_counts_json|safe }}{% else %}null{% endif %}
+  "notificationCounts": {% if notification_counts_json %}{{ notification_counts_json|safe }}{% else %}null{% endif %},
+  "members": [
+{% for member in members %}
+    {"id": {{ member.user.id }}, "username": "{{ member.user.username|escapejs }}", "displayName": "{{ member.user.display_name|default:member.user.username|escapejs }}"}{% if not forloop.last %},{% endif %}
+{% endfor %}
+  ]
 }
-</script>
-<script>
-  window.WORKSPACE_MEMBER_MAP = window.WORKSPACE_MEMBER_MAP || {};
-  {% for member in members %}
-  window.WORKSPACE_MEMBER_MAP["{{ member.user.display_name|default:member.user.username|escapejs }}"] = {{ member.user.id }};
-  window.WORKSPACE_MEMBER_MAP["{{ member.user.username|escapejs }}"] = {{ member.user.id }};
-  {% endfor %}
 </script>
 
 <script src="{% static 'js/base_layout.js' %}"></script>
