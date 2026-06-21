@@ -18,6 +18,7 @@
   --border-focus:  #484848;
 
   /* ── Text ─ */
+  --font-family: 'Inter', sans-serif;
   --text:          #f0f0f0;
   --text-300:      #d4d4d4;
   --text-400:      #a3a3a3;
@@ -153,7 +154,11 @@ a {
   transform: scale(1.08);
   box-shadow: 0 0 0 3px rgba(244,133,106,0.25);
 }
-
+.avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  }
 /* ─────────────────────────────────────────────────────────
    5. PAGE SHELL
 ───────────────────────────────────────────────────────── */
