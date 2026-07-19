@@ -34,8 +34,6 @@
       {{ user.username|first|upper }}
       {% endif %}
     </div>
-  </nav>
-
   <!-- messages (errors use same style as login/signup) -->
   {% if messages %}
     {% for msg in messages %}
@@ -57,6 +55,30 @@
       {% endif %}
     {% endfor %}
   {% endif %}
+    <!-- Notification Panel -->
+      <div class="noti-container">
+        <button id="notiBellBtn" class="noti-bell-btn" aria-label="Toggle notifications">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0"></path>
+          </svg>
+          <span id="notiBadge" class="noti-badge-counter hidden">0</span>
+        </button>
+
+        <div id="notiDropdown" class="noti-dropdown hidden">
+          <div class="noti-dropdown-header">
+            <h3>Alerts & Updates</h3>
+            <button id="markAllReadBtn" class="btn-text-accent">Mark all read</button>
+          </div>
+          <div id="notiDropdownContainer" class="noti-dropdown-feed">
+            <div class="noti-feed-empty">No new system alerts</div>
+          </div>
+          <div class="noti-dropdown-footer">
+            <button id="viewAllNotiLink" class="btn-text-link">View All Notifications</button>
+          </div>
+        </div>
+      </div>
+    </div>    
+  </nav>
 
   <!-- ── WORKSPACES PAGE ── -->
   <main class="page">
@@ -132,6 +154,78 @@
       {% endif %}
     </div>
   </main>
+  <div id="workspaceManagementSection" class="overlay" aria-hidden="true">
+    <div class="modal management-modal" role="dialog" aria-modal="true" aria-labelledby="managementTitle">
+      <div class="join-header">
+        <div>
+          <h2 id="managementTitle">Workspace Management</h2>
+          <p class="modal-subtitle">Review workspace membership applications and outbound request status</p>
+        </div>
+        <button type="button" class="icon-close" id="managementCloseBtn" aria-label="Close management modal">✕</button>
+      </div>
+
+      <hr class="section-divider">
+
+      <div class="management-tabs">
+        <button id="tabAdminBtn" class="tab-btn active">Admin Action Panel</button>
+        <button id="tabUserBtn" class="tab-btn">Outbound Request Status</button>
+      </div>
+
+      <div id="adminPanelWrapper" class="panel-card-container">
+        <div class="panel-header">
+          <h2>Pending Membership Applications</h2>
+          <p class="panel-subtitle">Review incoming registration records below for groups you control.</p>
+        </div>
+
+        <div class="table-responsive">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Applicant Account</th>
+                <th>Workspace Title</th>
+                <th>Applied On</th>
+                <th style="text-align: right;">Decision Execution</th>
+              </tr>
+            </thead>
+            <tbody id="adminRequestTableBody"></tbody>
+          </table>
+        </div>
+
+        <div id="adminEmptyState" class="empty-placeholder-view hidden">
+          <span class="placeholder-icon">✓</span>
+          <h3>All applications cleared</h3>
+          <p>No active user requests are pending authorization validation.</p>
+        </div>
+      </div>
+
+      <div id="userPanelWrapper" class="panel-card-container hidden">
+        <div class="panel-header">
+          <h2>Sent Applications Tracking Logs</h2>
+          <p class="panel-subtitle">Monitor ongoing confirmation status responses for external instances.</p>
+        </div>
+
+        <div class="table-responsive">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Workspace Title</th>
+                <th>Submission Time</th>
+                <th>Verification Progress Status</th>
+              </tr>
+            </thead>
+            <tbody id="userRequestTableBody"></tbody>
+          </table>
+        </div>
+
+        <div id="userEmptyState" class="empty-placeholder-view hidden">
+          <span class="placeholder-icon">✉</span>
+          <h3>No applications tracked</h3>
+          <p>You have not executed any workspace access applications.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div class="overlay" id="profileOverlay">
     <div class="modal modal--narrow" role="dialog" aria-modal="true">
       <form method="POST" action="{% url 'update_profile' %}" enctype="multipart/form-data">
