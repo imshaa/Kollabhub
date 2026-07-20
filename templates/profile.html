@@ -34,27 +34,6 @@
       {{ user.username|first|upper }}
       {% endif %}
     </div>
-  <!-- messages (errors use same style as login/signup) -->
-  {% if messages %}
-    {% for msg in messages %}
-      {% if 'error' in msg.tags %}
-        <div class="error-wrapper">
-          <div class="error-message">
-            <span class="error-icon">⚠</span>
-            <span class="error-text">{{ msg }}</span>
-          </div>
-        </div>
-      {% else %}
-        <!-- other message types could be styled differently later -->
-        <div class="error-wrapper">
-          <div class="error-message">
-            <span class="error-icon">ℹ</span>
-            <span class="error-text">{{ msg }}</span>
-          </div>
-        </div>
-      {% endif %}
-    {% endfor %}
-  {% endif %}
     <!-- Notification Panel -->
       <div class="noti-container">
         <button id="notiBellBtn" class="noti-bell-btn" aria-label="Toggle notifications">
@@ -79,6 +58,19 @@
       </div>
     </div>    
   </nav>
+
+  {% if messages %}
+    <div class="page-alerts" aria-live="polite">
+      {% for msg in messages %}
+        <div class="error-wrapper" role="status">
+          <div class="error-message">
+            <span class="error-icon">{% if 'error' in msg.tags %}⚠{% else %}ℹ{% endif %}</span>
+            <span class="error-text">{{ msg }}</span>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
 
   <!-- ── WORKSPACES PAGE ── -->
   <main class="page">
@@ -187,7 +179,37 @@
                 <th style="text-align: right;">Decision Execution</th>
               </tr>
             </thead>
-            <tbody id="adminRequestTableBody"></tbody>
+            <tbody id="adminRequestTableBody">
+              {% if incoming_requests %}
+                {% for request_item in incoming_requests %}
+                  <tr data-request-id="{{ request_item.id }}">
+                    <td>
+                      <div class="user-profile-cell">
+                        <div class="cell-avatar">{{ request_item.user.username|first|upper }}</div>
+                        <div>
+                          <div class="cell-info-name">{{ request_item.user.display_name|default:request_item.user.username }}</div>
+                          <div class="cell-info-email">{{ request_item.user.email }}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td>{{ request_item.workspace.title }}</td>
+                    <td>{{ request_item.created_at|date:"M d, Y H:i" }}</td>
+                    <td>
+                      <div class="action-btn-group">
+                        {% if request_item.status == 'on_hold' or request_item.status == 'pending' %}
+                          <button type="button" class="btn-table-approve" data-action="approve" data-request-id="{{ request_item.id }}">Approve</button>
+                          <button type="button" class="btn-table-reject" data-action="reject" data-request-id="{{ request_item.id }}">Reject</button>
+                        {% else %}
+                          <span class="status-pill {% if request_item.status == 'on_hold' %}pending{% else %}{{ request_item.status }}{% endif %}">
+                            {% if request_item.status == 'on_hold' %}Pending{% else %}{{ request_item.get_status_display }}{% endif %}
+                          </span>
+                        {% endif %}
+                      </div>
+                    </td>
+                  </tr>
+                {% endfor %}
+              {% endif %}
+            </tbody>
           </table>
         </div>
 
@@ -213,7 +235,21 @@
                 <th>Verification Progress Status</th>
               </tr>
             </thead>
-            <tbody id="userRequestTableBody"></tbody>
+            <tbody id="userRequestTableBody">
+              {% if user_requests %}
+                {% for request_item in user_requests %}
+                  <tr data-request-id="{{ request_item.id }}">
+                    <td>{{ request_item.workspace.title }}</td>
+                    <td>{{ request_item.created_at|date:"M d, Y H:i" }}</td>
+                    <td>
+                      <span class="status-pill {% if request_item.status == 'on_hold' %}pending{% else %}{{ request_item.status }}{% endif %}">
+                        {% if request_item.status == 'on_hold' %}Pending{% else %}{{ request_item.get_status_display }}{% endif %}
+                      </span>
+                    </td>
+                  </tr>
+                {% endfor %}
+              {% endif %}
+            </tbody>
           </table>
         </div>
 
