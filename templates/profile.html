@@ -24,39 +24,40 @@
         <div class="logo-icon">K</div>
           <span class="logo-text">Kollab<span class="logo-accent">Hub</span></span>
       </a>
-      <div class="header-actions">
-        <a href="{% url 'home' %}" class="home-link">Home</a>
-      </div>
-    <div class="avatar">
-      {% if user.profile_picture %}
-      <img src="{{ user.profile_picture_url }}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">
-      {% else %}
-      {{ user.username|first|upper }}
-      {% endif %}
-    </div>
-    <!-- Notification Panel -->
-      <div class="noti-container">
-        <button id="notiBellBtn" class="noti-bell-btn" aria-label="Toggle notifications">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0"></path>
-          </svg>
-          <span id="notiBadge" class="noti-badge-counter hidden">0</span>
-        </button>
+            <div class="header-actions">
+              <!-- Profile Icon -->
+                <div class="avatar">
+                  {% if user.profile_picture %}
+                  <img src="{{ user.profile_picture_url }}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">
+                  {% else %}
+                  {{ user.username|first|upper }}
+                  {% endif %}
+                </div>
+              <!-- Notification Bell -->
+                <!-- Notification Panel -->
+                <div class="noti-container">
+                  <button id="notiBellBtn" class="noti-bell-btn" aria-label="Toggle notifications">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0"></path>
+                    </svg>
+                    <span id="notiBadge" class="noti-badge-counter hidden">0</span>
+                  </button>
 
-        <div id="notiDropdown" class="noti-dropdown hidden">
-          <div class="noti-dropdown-header">
-            <h3>Alerts & Updates</h3>
-            <button id="markAllReadBtn" class="btn-text-accent">Mark all read</button>
-          </div>
-          <div id="notiDropdownContainer" class="noti-dropdown-feed">
-            <div class="noti-feed-empty">No new system alerts</div>
-          </div>
-          <div class="noti-dropdown-footer">
-            <button id="viewAllNotiLink" class="btn-text-link">View All Notifications</button>
-          </div>
-        </div>
-      </div>
-    </div>    
+                  <div id="notiDropdown" class="noti-dropdown hidden">
+                    <div class="noti-dropdown-header">
+                      <h3>Alerts & Updates</h3>
+                      <button id="markAllReadBtn" class="btn-text-accent">Mark all read</button>
+                    </div>
+                    <div id="notiDropdownContainer" class="noti-dropdown-feed">
+                      <div class="noti-feed-empty">No new system alerts</div>
+                    </div>
+                    <div class="noti-dropdown-footer">
+                      <button id="viewAllNotiLink" class="btn-text-link">View All Notifications</button>
+                    </div>
+                  </div>
+                </div> 
+            </div>
+
   </nav>
 
   {% if messages %}

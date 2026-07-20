@@ -1,8 +1,4 @@
-﻿/* KOLLABHUB workspace helpers
-   only basic modal open/close and permission card behaviour
-*/
-
-const createOverlay = document.getElementById('createOverlay');
+﻿const createOverlay = document.getElementById('createOverlay');
 const joinOverlay   = document.getElementById('joinOverlay');
 
 function openCreateModal() {
