@@ -261,6 +261,36 @@ class WorkspaceInvite(models.Model):
 
     is_active = models.BooleanField(default=True)
 
+
+# Workspace Join Requests (for workspaces that require admin approval)
+class WorkspaceJoinRequest(models.Model):
+    """Tracks pending workspace join requests when admin approval is required."""
+    
+    STATUS_CHOICES = (
+        ("pending", "Pending"),
+        ("on_hold", "On Hold"),
+        ("approved", "Approved"),
+        ("rejected", "Rejected"),
+    )
+    
+    workspace = models.ForeignKey("Workspace", on_delete=models.CASCADE, related_name="join_requests")
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="workspace_join_requests")
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="on_hold")
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    reviewed_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, 
+                                   null=True, blank=True, related_name="reviewed_join_requests")
+    
+    class Meta:
+        unique_together = ("workspace", "user")
+        ordering = ["-created_at"]
+    
+    def __str__(self):
+        return f"{self.user.username} -> {self.workspace.title} ({self.status})"
+
+
 class AIMessage(models.Model):
     """
     Stores every turn of a user's AI conversation inside a workspace.

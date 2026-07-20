@@ -52,7 +52,9 @@ urlpatterns = [
     # ── Notiifications ─────────────────────────────────────
     path("api/workspace/<int:workspace_id>/notifications/counts/", views.notification_counts_api, name="notification_counts_api"),
     path("api/workspace/<int:workspace_id>/notifications/mark-read/", views.notification_mark_read, name="notification_mark_read"),
-   
+    path("api/workspace/notifications/", views.workspace_notifications_api, name="workspace_notifications_api"),
+    path("api/workspace-join-request/<int:request_id>/decision/", views.workspace_join_request_decision, name="workspace_join_request_decision"),
+    
     # ── home page  ─────────────────────────────────────
     path('', views.home, name='home'),
     

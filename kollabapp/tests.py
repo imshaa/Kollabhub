@@ -3,7 +3,7 @@ from channels.db import database_sync_to_async
 from django.urls import reverse
 from urllib.parse import quote_plus
 
-from .models import CustomUser, Workspace, WorkspaceMembership
+from .models import CustomUser, Workspace, WorkspaceMembership, WorkspaceJoinRequest, Notification
 
 
 class WorkspaceJoinTests(TestCase):
@@ -140,6 +140,82 @@ class WorkspaceJoinTests(TestCase):
         # expect at least one public and one private badge
         self.assertContains(response, "Public")
         self.assertContains(response, "Private")
+
+    def test_workspace_join_requests_show_in_management_modal(self):
+        admin_user = CustomUser.objects.create_user(username="admin2", password="pass", email="admin2@example.com")
+        workspace = Workspace.objects.create(title="ApprovalSpace", admin=admin_user, visibility="private")
+        WorkspaceMembership.objects.create(workspace=workspace, user=admin_user, role="admin")
+
+        request_user = CustomUser.objects.create_user(username="requester", password="pass", email="requester@example.com")
+        WorkspaceJoinRequest.objects.create(workspace=workspace, user=request_user, status="on_hold")
+
+        self.client.login(username="admin2", password="pass")
+        response = self.client.get(reverse("workspace"))
+
+        self.assertContains(response, "ApprovalSpace")
+        self.assertContains(response, "requester")
+        self.assertContains(response, "Pending")
+
+    def test_workspace_join_request_decision_approves_member_and_creates_membership(self):
+        admin_user = CustomUser.objects.create_user(username="admin5", password="pass", email="admin5@example.com")
+        workspace = Workspace.objects.create(title="DecisionSpace", admin=admin_user, visibility="private")
+        WorkspaceMembership.objects.create(workspace=workspace, user=admin_user, role="admin")
+
+        request_user = CustomUser.objects.create_user(username="requester4", password="pass", email="requester4@example.com")
+        join_request = WorkspaceJoinRequest.objects.create(workspace=workspace, user=request_user, status="on_hold")
+
+        self.client.login(username="admin5", password="pass")
+        response = self.client.post(
+            reverse("workspace_join_request_decision", args=[join_request.id]),
+            {"action": "approve"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["status"], "approved")
+        self.assertTrue(
+            WorkspaceMembership.objects.filter(workspace=workspace, user=request_user).exists()
+        )
+        join_request.refresh_from_db()
+        self.assertEqual(join_request.status, "approved")
+
+    def test_workspace_join_request_creates_notification_for_admin(self):
+        admin_user = CustomUser.objects.create_user(username="admin3", password="pass", email="admin3@example.com")
+        workspace = Workspace.objects.create(title="NotifySpace", admin=admin_user, visibility="private")
+        WorkspaceMembership.objects.create(workspace=workspace, user=admin_user, role="admin")
+
+        request_user = CustomUser.objects.create_user(username="requester2", password="pass", email="requester2@example.com")
+        WorkspaceJoinRequest.objects.create(workspace=workspace, user=request_user, status="on_hold")
+
+        self.client.login(username="requester2", password="pass")
+        response = self.client.post(
+            reverse("join_workspace_manual"),
+            {"workspace_email": admin_user.email, "title": workspace.title},
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(Notification.objects.filter(user=admin_user, workspace=workspace).exists())
+
+    def test_workspace_notifications_api_returns_admin_and_user_requests(self):
+        admin_user = CustomUser.objects.create_user(username="admin4", password="pass", email="admin4@example.com")
+        workspace = Workspace.objects.create(title="ApiNotifySpace", admin=admin_user, visibility="private")
+        WorkspaceMembership.objects.create(workspace=workspace, user=admin_user, role="admin")
+
+        request_user = CustomUser.objects.create_user(username="requester3", password="pass", email="requester3@example.com")
+        WorkspaceJoinRequest.objects.create(workspace=workspace, user=request_user, status="on_hold")
+        WorkspaceJoinRequest.objects.create(workspace=workspace, user=self.user, status="approved")
+
+        self.client.login(username=admin_user.username, password="pass")
+        response = self.client.get(reverse("workspace_notifications_api"))
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["pending_count"], 1)
+        self.assertGreaterEqual(len(payload["incoming_requests"]), 1)
+        self.assertEqual(payload["incoming_requests"][0]["status_label"], "Pending")
+        self.assertGreaterEqual(len(payload["user_requests"]), 1)
 
     def test_login_redirects_when_authenticated(self):
         self.login()

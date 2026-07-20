@@ -26,7 +26,8 @@ from .models import Invitation
 from .models import ChatFile
 from .models import Task
 from .models import TaskList, TaskComment, TaskAttachment, TaskboardSettings, Notification
-from .models import WorkspaceInvite, AIMessage
+from .models import WorkspaceInvite, AIMessage, WorkspaceJoinRequest
+from django.utils import timezone
 from django.http import JsonResponse
 import json, re, random, string
 from django.db import models
@@ -366,11 +367,80 @@ def home(request):
     return render(request, 'home.html')
 
 
+@login_required
+def workspace_notifications_api(request):
+    admin_workspaces = Workspace.objects.filter(admin=request.user)
+    incoming_requests = WorkspaceJoinRequest.objects.filter(
+        workspace__in=admin_workspaces
+    ).select_related("workspace", "user").order_by("-created_at")
+    user_requests = WorkspaceJoinRequest.objects.filter(user=request.user).select_related("workspace").order_by("-created_at")
+
+    def serialize_request(item, is_admin=False):
+        status = item.status or "pending"
+        status_label = status.title()
+        if status == "on_hold":
+            status_label = "Pending"
+        elif status == "approved":
+            status_label = "Approved"
+        elif status == "rejected":
+            status_label = "Rejected"
+        status_class = status if status in {"pending", "approved", "rejected"} else "pending"
+        if status == "on_hold":
+            status_class = "pending"
+        return {
+            "id": item.id,
+            "workspace_id": item.workspace_id,
+            "workspace_title": item.workspace.title if item.workspace else "",
+            "requested_by": item.user.display_name or item.user.username if item.user else "",
+            "requested_by_email": item.user.email if item.user else "",
+            "created_at": item.created_at.strftime("%b %d, %H:%M"),
+            "status": status,
+            "status_label": status_label,
+            "status_class": status_class,
+            "is_admin": is_admin,
+        }
+
+    payload = {
+        "pending_count": incoming_requests.filter(status__in=["pending", "on_hold"]).count(),
+        "incoming_requests": [serialize_request(item, True) for item in incoming_requests],
+        "user_requests": [serialize_request(item, False) for item in user_requests],
+    }
+    return JsonResponse(payload)
+
 
 # To check Workspace Admin.
 def is_workspace_admin(user, workspace):
     return WorkspaceMembership.objects.filter(workspace=workspace, user=user, role="admin").exists()
 
+
+@login_required
+@require_POST
+def workspace_join_request_decision(request, request_id):
+    join_request = get_object_or_404(WorkspaceJoinRequest, id=request_id)
+    if not is_workspace_admin(request.user, join_request.workspace):
+        return JsonResponse({"error": "Only workspace admins can decide on requests."}, status=403)
+
+    action = (request.POST.get("action") or "").strip().lower()
+    if action not in {"approve", "reject"}:
+        return JsonResponse({"error": "Invalid action."}, status=400)
+
+    join_request.status = "approved" if action == "approve" else "rejected"
+    join_request.reviewed_at = timezone.now()
+    join_request.reviewed_by = request.user
+    join_request.save()
+
+    if action == "approve":
+        WorkspaceMembership.objects.get_or_create(
+            workspace=join_request.workspace,
+            user=join_request.user,
+            defaults={"role": "member"}
+        )
+
+    return JsonResponse({
+        "ok": True,
+        "status": join_request.status,
+        "message": "Join request approved." if action == "approve" else "Join request rejected.",
+    })
 
 
 # ------------------------------ Workspace-page logic---------------------------
@@ -446,13 +516,21 @@ def workspace(request):
 
         return redirect("chatui", workspace_id=workspace.id)
 
-    # GET request: Show workspace hub
     memberships = WorkspaceMembership.objects.filter(user=request.user).select_related("workspace")
     workspaces = [m.workspace for m in memberships]
-    
+
+    admin_workspaces = Workspace.objects.filter(admin=request.user)
+    incoming_requests = WorkspaceJoinRequest.objects.filter(
+        workspace__in=admin_workspaces
+    ).select_related("workspace", "user").order_by("-created_at")
+
+    user_requests = WorkspaceJoinRequest.objects.filter(user=request.user).select_related("workspace").order_by("-created_at")
+
     return render(request, "profile.html", {
         "workspaces": workspaces,
-        "user": request.user
+        "user": request.user,
+        "incoming_requests": incoming_requests,
+        "user_requests": user_requests,
     })
 
 
@@ -540,7 +618,38 @@ def join_workspace_manual(request):
             messages.error(request, "You cannot join more than 50 workspaces.")
             return redirect("profile")
 
-        # Direct membership for both public and private workspaces.
+        # Require admin approval for private workspaces and for workspaces that explicitly restrict invites to admins.
+        requires_admin_approval = (workspace.visibility == "private") or workspace.invites_restricted_to_admins
+
+        if requires_admin_approval:
+            join_request, created = WorkspaceJoinRequest.objects.get_or_create(
+                workspace=workspace,
+                user=request.user,
+                defaults={"status": "on_hold"}
+            )
+
+            if created:
+                _create_workspace_join_request_notification(workspace, join_request)
+                messages.success(request, f"Join request sent to {workspace.title}. Awaiting admin approval.")
+            elif join_request.status == "on_hold" and not Notification.objects.filter(workspace=workspace, user__in=WorkspaceMembership.objects.filter(workspace=workspace, role='admin').values_list('user_id', flat=True), notification_type='workspace_join_request', reference_id=str(join_request.id)).exists():
+                _create_workspace_join_request_notification(workspace, join_request)
+            else:
+                if join_request.status == "on_hold":
+                    messages.info(request, f"Your join request for {workspace.title} is pending approval.")
+                elif join_request.status == "approved":
+                    WorkspaceMembership.objects.get_or_create(
+                        workspace=workspace,
+                        user=request.user,
+                        defaults={"role": "member"}
+                    )
+                    messages.success(request, f"Join request approved! You are now a member of {workspace.title}.")
+                    return redirect("chatui", workspace_id=workspace.id)
+                elif join_request.status == "rejected":
+                    messages.error(request, f"Your join request for {workspace.title} was rejected.")
+
+            return redirect("profile")
+        
+        # Direct membership for public workspaces
         membership, created = WorkspaceMembership.objects.get_or_create(
             workspace=workspace,
             user=request.user,
@@ -2330,7 +2439,31 @@ def _create_notification_records(workspace, user_ids, actor, section, notificati
             reference_id=str(reference_id) if reference_id is not None else None,
         ))
     Notification.objects.bulk_create(notifications)
- 
+
+
+def _create_workspace_join_request_notification(workspace, join_request):
+    if not workspace or not join_request:
+        return
+
+    admin_ids = list(
+        WorkspaceMembership.objects.filter(workspace=workspace, role="admin")
+        .values_list("user_id", flat=True)
+    )
+    if not admin_ids:
+        return
+
+    message = f"{join_request.user.display_name or join_request.user.username} requested access to {workspace.title}."
+    _create_notification_records(
+        workspace=workspace,
+        user_ids=admin_ids,
+        actor=join_request.user,
+        section="taskboard",
+        notification_type="workspace_join_request",
+        message=message,
+        reference_id=str(join_request.id),
+    )
+
+
 def _notify_workspace_users(workspace, actor, section, notification_type, message, reference_id=None, target_user_id=None, extra_user_ids=None):
     membership_qs = WorkspaceMembership.objects.filter(workspace=workspace)
     if extra_user_ids is not None:
@@ -3201,5 +3334,4 @@ def ai_clear_history(request, workspace_id):
         user=request.user,
     ).delete()
  
-    return JsonResponse({'success': True, 'deleted': deleted_count})
- 
+    return JsonResponse({'success': True, 'deleted': deleted_count}) 

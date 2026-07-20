@@ -100,6 +100,23 @@ a {
 /* ─────────────────────────────────────────────────────────
    4. NAVBAR
 ───────────────────────────────────────────────────────── */
+.page-alerts {
+  position: relative;
+  z-index: 20;
+  padding: 20px 48px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.page-alerts .error-wrapper {
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+}
+
 .navbar {
   display: flex;
   align-items: center;
@@ -305,6 +322,7 @@ a {
   font-size: 14px;
   flex-shrink: 0;
 }
+.noti-item-status-icon.pending { background: rgba(245, 158, 11, 0.1); color: var(--status-pending-yellow); }
 .noti-item-status-icon.approved { background: rgba(16, 185, 129, 0.1); color: var(--status-approved-green); }
 .noti-item-status-icon.rejected { background: rgba(239, 68, 68, 0.1); color: var(--status-rejected-red); }
 
