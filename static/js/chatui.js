@@ -268,7 +268,7 @@ async function loadWorkspaceHistory() {
       if (m.voice_url) {
         appendVoiceNoteToWindow({
           sender:    sender,
-          avatar:    avatar,
+          avatar:    m.sender_avatar || "/static/Areeba.jpeg",
           voiceUrl:  m.voice_url,
           duration:  m.duration || 0,
           side:      isOwnMessage ? 'right' : 'left',
@@ -280,7 +280,7 @@ async function loadWorkspaceHistory() {
         m.files.forEach(f => {
           appendFileMessageToWindow({
             sender:       sender,
-            avatar:       avatar,
+            avatar:    m.sender_avatar || "/static/Areeba.jpeg",
             fileUrl:      f.file_url,
             fileId:       f.file_id,
             fileName:     f.original_name,
@@ -504,8 +504,52 @@ function avatarColor(name) {
   return palette[Math.abs(hash) % palette.length];
 }
 
-function initials(name) {
-  return name.split(' ').map(w => w[0]).join('').toUpperCase();
+function initials(name, count = 2) {
+  const base = String(name || '').trim();
+  if (!base) return '?';
+  const parts = base.split(/\s+/).filter(Boolean);
+  const letters = [];
+  for (const part of parts) {
+    if (part && letters.length < count) letters.push(part[0]);
+  }
+  if (letters.length === 0) return '?';
+  return letters.join('').toUpperCase();
+}
+
+function isRenderableAvatar(avatar) {
+  if (!avatar) return false;
+  const value = String(avatar).trim();
+  if (!value) return false;
+  return value !== '/static/Areeba.jpeg';
+}
+
+function renderAvatarContent(container, sender, avatar) {
+  container.innerHTML = '';
+  container.classList.remove('has-image');
+  container.style.background = avatarColor(sender);
+  container.style.color = '#fff';
+  container.style.overflow = 'hidden';
+
+  if (isRenderableAvatar(avatar)) {
+    const img = document.createElement('img');
+    img.className = 'msg-av-img';
+    img.alt = sender || 'User avatar';
+    img.src = avatar;
+    img.onerror = () => {
+      if (container.dataset.fallbackApplied === '1') return;
+      container.dataset.fallbackApplied = '1';
+      container.innerHTML = '';
+      container.classList.remove('has-image');
+      container.style.background = avatarColor(sender);
+      container.textContent = initials(sender, 2);
+    };
+    container.appendChild(img);
+    container.classList.add('has-image');
+    container.style.color = 'transparent';
+    return;
+  }
+
+  container.textContent = initials(sender, 2);
 }
 
 function appendMessageToWindow({ sender, avatar, text, side = "left", time = new Date(), prepend = false }) {
@@ -517,8 +561,7 @@ function appendMessageToWindow({ sender, avatar, text, side = "left", time = new
 
   const av = document.createElement('div');
   av.className = 'msg-av';
-  av.textContent = initials(sender);
-  av.style.background = avatarColor(sender);
+  renderAvatarContent(av, sender, avatar);
 
   const body = document.createElement('div');
   body.className = 'msg-body';
@@ -1917,8 +1960,7 @@ function appendVoiceNoteToWindow({ sender, avatar, voiceUrl, duration, side, tim
  
   const av = document.createElement('div');
   av.className = 'msg-av';
-  av.textContent = initials(sender);
-  av.style.background = avatarColor(sender);
+  renderAvatarContent(av, sender, avatar);
  
   const totalSec  = Math.max(duration || 0, 1);
   const waveformSVG = generateWaveformSVG(messageId || sender, 48);
@@ -2488,8 +2530,7 @@ function appendFileMessageToWindow({ sender, avatar, fileUrl, fileId, fileName,
  
   const av = document.createElement('div');
   av.className   = 'msg-av';
-  av.textContent = initials(sender);
-  av.style.background = avatarColor(sender);
+  renderAvatarContent(av, sender, avatar);
  
   const body = document.createElement('div');
   body.className = 'msg-body';

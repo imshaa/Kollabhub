@@ -1,0 +1,462 @@
+KollabHub – Full Technical and Theoretical Viva Summary
+=======================================================
+
+Project Name: KollabHub
+Type: Final Year Project (FYP)
+Purpose: A unified team collaboration platform with real-time communication, task management, and AI assistance.
+
+1. Project Overview
+-------------------
+KollabHub is a web-based collaboration system designed to reduce tool fragmentation by combining three core functionalities into one platform:
+1. Communication module for workspace chats, direct messages, voice notes, file sharing, and video/voice calls.
+2. Task board module for managing tasks, lists, comments, attachments, and permissions.
+3. AI assistant module for helping users with project-related questions, technical queries, and workspace assistance.
+
+The project is built as a full-stack web application where users can create workspaces, invite members, collaborate in real time, manage tasks, and interact with an AI assistant inside the workspace environment.
+
+2. Problem Statement and Solution
+---------------------------------
+Before KollabHub, team collaboration usually required multiple separate tools for messaging, task planning, and AI support. The main challenge was fragmentation, poor coordination, and lack of integrated automation.
+
+KollabHub solves this by providing:
+- One workspace for communication and coordination.
+- Real-time messaging and collaboration.
+- Task tracking inside the same workspace.
+- AI assistance for support and productivity.
+- Role-based access and workspace governance.
+
+3. Software Architecture
+------------------------
+KollabHub follows a layered web application architecture.
+
+Overall architecture:
+- Frontend: HTML, CSS, JavaScript (vanilla JS), templates rendered by Django.
+- Backend: Django framework with views, models, URL routing, authentication, and business logic.
+- Real-time layer: Django Channels and WebSockets.
+- Message broker: Redis (used for channel layers).
+- Database: SQLite in development, with PostgreSQL-ready design.
+- File storage: Supabase Storage for media and attachments.
+- AI layer: Hybrid approach using rule-based logic, ML classification, and Groq API.
+
+This style is close to the Model-View-Template (MVT) pattern in Django, with additional real-time communication support.
+
+4. Frontend Technical Understanding
+----------------------------------
+Frontend technologies used:
+- HTML templates: home, login, signup, profile, chat, taskboard, AI page.
+- CSS files: modular styling for auth, chat, taskboard, profile, home, AI UI.
+- JavaScript: handles dynamic UI, API calls, notifications, WebSocket interaction, taskboard actions, AI chat UI, and real-time updates.
+
+Main frontend functions:
+- User authentication pages for signup, login, reset password.
+- Workspace creation and management pages.
+- Chat interface with message thread, DM tabs, file upload, voice note UI, and call UI.
+- Taskboard interface with lists, cards, drag/drop-like state updates, permissions-based UI, comments, attachments.
+- AI assistant page with a floating or embedded chat panel.
+
+Frontend workflow:
+- User requests a page.
+- Django renders the HTML template with relevant context.
+- JavaScript sends AJAX/Fetch requests to Django APIs for dynamic operations.
+- WebSocket connections enable instant updates without page reload.
+
+Frontend technical importance:
+- Separation of concerns between template, CSS, and JS.
+- Dynamic state handling without full page reloads.
+- Event-driven UI for messages, notifications, and taskboard changes.
+- Real-time WebSocket-based responsiveness.
+
+5. Backend Technical Understanding
+---------------------------------
+Backend is implemented in Django and is the core of the system.
+
+Main backend responsibilities:
+- Handle user authentication and authorization.
+- Manage workspaces, memberships, roles, and invitations.
+- Process chat and DM messages.
+- Manage taskboard CRUD operations.
+- Handle file uploads and storage integration.
+- Manage AI responses and history.
+- Broadcast real-time events via WebSockets.
+- Manage notifications and permission rules.
+
+Backend structure:
+- views.py contains all business logic.
+- models.py defines database schema.
+- urls.py defines all endpoints.
+- consumers.py handles WebSocket communication.
+- ai_assistant.py implements the AI workflow.
+- supabase_storage.py handles cloud storage interaction.
+
+Backend process flow:
+1. User sends a request to a Django URL.
+2. Django view validates the request.
+3. Business logic checks membership, permissions, or authentication.
+4. Data is stored or retrieved from the database.
+5. JSON response or template response is returned to frontend.
+
+6. Database Technical Understanding
+----------------------------------
+The database is designed around relational models and foreign key relationships.
+
+Main database entities:
+- CustomUser: stores user account information, profile, status, display name, profile picture.
+- Workspace: stores workspace title, description, visibility, admin, image, privacy settings.
+- WorkspaceMembership: links users to workspaces and assigns roles such as admin or member.
+- Message: stores workspace chat messages, including optional voice note and duration.
+- DirectMessage: stores one-to-one private messages between users inside a workspace.
+- ChatFile: stores metadata of files shared in chat or DMs.
+- WorkspaceCall: stores information about voice/video calls.
+- Invitation: tracks invitations sent to users by email or username.
+- WorkspaceInvite: stores invite link tokens for workspace joining.
+- WorkspaceJoinRequest: stores join requests for private or admin-approved workspaces.
+- AIMessage: stores AI conversation history per user and workspace.
+- TaskList: stores columns/lists on taskboard.
+- Task: stores each task with title, description, priority, completion status, assignee, and creator.
+- TaskAttachment: stores task file or link attachments.
+- TaskComment: stores comments on tasks.
+- TaskboardSettings: stores board behavior and permission settings.
+- Notification: stores notifications for chat, taskboard, DM, and workspace events.
+
+Database design principles:
+- Relational modeling is used.
+- Foreign keys define ownership and relationships.
+- Indexes are added for faster querying on chat and DM history.
+- Unique constraints prevent duplicate memberships and duplicate invite tokens.
+- Soft logical separation such as workspace-scoped messages and per-user AI history is implemented.
+
+Why database design is important:
+- It supports real-time operations.
+- It enables auditability and data persistence.
+- It supports permission checks and workspace isolation.
+- It helps performance by reducing redundant data.
+
+7. Authentication and Authorization
+----------------------------------
+Authentication is handled by Django’s built-in authentication system with a custom user model.
+
+Authentication features:
+- Signup with email and password.
+- Login using either username or email.
+- Password strength validation.
+- Password reset functionality.
+- Session-based login using Django auth.
+
+Security features:
+- Passwords are hashed using Django’s secure hashing mechanism.
+- Strong password rules enforce uppercase, lowercase, digit, and special character.
+- Only authenticated users can access protected workspace features.
+- Membership checks ensure that users can only access allowed workspaces.
+
+Authorization model:
+- Users can be workspace admins or members.
+- Admins can manage members, transfer ownership, update privacy, create invite links, delete workspaces, and configure board settings.
+- Members can communicate, participate in tasks, and interact with AI but have limited administrative rights.
+
+8. Communication Module – Detailed Summary
+-------------------------------------------
+This is one of the main modules of the system.
+
+Features included:
+- Workspace group chat.
+- Direct messages between users.
+- Typing indicators.
+- Voice notes.
+- File sharing.
+- Workspace calls (voice/video).
+- Notifications for new messages and DMs.
+
+Communication flow:
+1. User opens a workspace chat page.
+2. A WebSocket connection is created for the workspace.
+3. Messages sent by any member are broadcast to the workspace group.
+4. Messages are saved in the database.
+5. Notification records are created for other members.
+6. Clients receive updates instantly through WebSocket events.
+
+Text chat process:
+- Frontend sends message text to the server.
+- Backend validates membership.
+- Message is saved to Message model.
+- Event is broadcast to relevant WebSocket group.
+- All connected clients update the UI.
+
+DM (Direct Message) process:
+- The recipient is identified by user ID.
+- A private group is created for the two users within the workspace.
+- Messages are stored in DirectMessage model.
+- Only the two participants can see the message in that DM stream.
+
+Voice note process:
+- Audio is uploaded to storage.
+- The storage path and duration are saved in the database.
+- A signed URL is generated for playback.
+- WebSocket broadcasts the voice note to relevant clients.
+
+File sharing process:
+- File uploads are validated for size and type.
+- Files are stored in Supabase Storage.
+- File metadata is saved in ChatFile model.
+- The file is shared with the workspace or DM participants.
+
+Call process:
+- The caller initiates a voice or video call.
+- The system creates a Daily.co room and token.
+- The call record is stored in WorkspaceCall model.
+- Connected clients receive an incoming-call signal.
+- The room URL and token are issued to participants for join.
+
+Why WebSockets are used:
+- They allow real-time message delivery.
+- They reduce the need for constant page refreshes.
+- They provide instant collaboration and notifications.
+
+9. Task Board Module – Detailed Summary
+---------------------------------------
+The task board is the second core module.
+
+Main purpose:
+- Organize work into tasks and lists.
+- Support collaborative project management.
+- Keep task progress visible to workspace members.
+
+Main entities:
+- TaskList: each list represents a column such as To Do, In Progress, Review, Done.
+- Task: each task stores title, description, priority, assignee, and completion.
+- TaskAttachment: stores file attachments or links.
+- TaskComment: stores discussion around a task.
+- TaskboardSettings: controls board permissions and behavior.
+
+Task board features:
+- Create lists.
+- Edit lists.
+- Delete non-default lists.
+- Create tasks.
+- Update tasks.
+- Move tasks between lists.
+- Mark tasks complete.
+- Assign tasks to members.
+- Add priority levels.
+- Add descriptions.
+- Attach files and links.
+- Add comments.
+- Configure board permissions and limits.
+
+Permission model:
+- Admins can manage board settings and sensitive operations.
+- Permissions can be configured for create, edit, delete, move, comment, attach files, and list management.
+- Board settings allow restrictions such as admin-only actions.
+
+Task board process:
+1. User requests the taskboard page.
+2. Backend ensures the user is a workspace member.
+3. Default lists are created if they do not exist.
+4. Task data is loaded from the database.
+5. User actions trigger API requests.
+6. Backend updates the database and broadcasts the change.
+7. Other clients update instantly.
+
+Why this matters theoretically:
+- It follows the concept of Kanban-style project management.
+- It demonstrates collaboration, transparency, and workflow visualization.
+- It shows practical application of CRUD operations and role-based access control.
+
+10. AI Assistant Module – Detailed Summary
+------------------------------------------
+The AI assistant is the third main module and is a significant contribution of the project.
+
+AI objective:
+- Help users with workspace-related questions.
+- Support technical and project-related queries.
+- Provide assistance in collaboration, task management, and software engineering concepts.
+
+AI architecture:
+The assistant uses a hybrid three-tier design:
+- Tier 1: Rule-based keyword matching for short greetings and simple commands.
+- Tier 2: Machine learning intent classification using TF-IDF and a trained classifier loaded from .pkl files.
+- Tier 3: Groq API with Llama 3.1 for complex or open-ended questions.
+
+AI workflow:
+1. User sends a message from the AI chat panel.
+2. Backend validates membership.
+3. The message is stored in AIMessage model as a user message.
+4. The assistant generates a response using the hybrid system.
+5. The AI reply is saved to AIMessage model.
+6. The response is returned to the user.
+
+Why this is technically strong:
+- It combines deterministic rule-based logic with AI-based generalization.
+- It reduces dependency on API calls for simple requests.
+- It provides fallback in case the ML model is uncertain.
+- It demonstrates real-world AI integration in a web application.
+
+AI data handling:
+- Conversations are stored per workspace and per user.
+- History can be retrieved and cleared.
+- The AI works within the context of the current workspace.
+
+11. Workspace Management and Membership Model
+---------------------------------------------
+Workspaces are the main organizational unit.
+
+Workspace features:
+- Create workspaces.
+- Set title, description, display name, team email, image, visibility.
+- Join workspaces manually or through invite links.
+- Invite members by email or username.
+- Request access to private workspaces.
+- Admin approval-based join flow.
+- Leave workspace.
+- Transfer ownership.
+- Delete workspace.
+
+Membership rules:
+- Each user can belong to multiple workspaces.
+- Workspace membership is modeled explicitly using WorkspaceMembership.
+- Roles are restricted to admin and member.
+
+Why this matters:
+- It proves a multi-tenant collaboration model.
+- It supports scalable user collaboration across workspaces.
+- It shows practical access control and governance.
+
+12. Admin and Member Access Control
+-----------------------------------
+Access control is an important theoretical concept in the project.
+
+Admin capabilities:
+- Add or remove members.
+- Transfer workspace ownership.
+- Delete workspace.
+- Update workspace privacy settings.
+- Create invite links.
+- Configure taskboard permissions.
+- Manage join requests.
+
+Member capabilities:
+- Chat and collaborate.
+- Use direct messages.
+- Share files and voice notes.
+- Create and update tasks.
+- Comment on tasks.
+- Interact with AI assistant.
+- Join public workspaces directly or request access to private ones.
+
+This demonstrates role-based access control (RBAC), which is a critical software engineering concept.
+
+13. Security and Reliability Considerations
+------------------------------------------
+The project includes several security considerations:
+- Password validation before signup or reset.
+- Hashing of user passwords.
+- Authentication required for workspace features.
+- Membership validation for every protected request.
+- Permission checks for admin-only actions.
+- File-type and size validation for uploads.
+- Storage path management for file safety.
+- Use of signed URLs for cloud file access.
+
+Reliability features:
+- WebSocket broadcasting for real-time operations.
+- Notification records for missed events.
+- Retry-safe storage path and signed URL refresh logic.
+- Cleanup for old messages based on retention policy.
+
+14. Why Django Was Chosen
+--------------------------
+Django is suitable because:
+- It provides rapid development.
+- It has built-in authentication and admin support.
+- It supports ORM and migrations.
+- It integrates well with web applications.
+- It fits the MVT architecture smoothly.
+
+15. Why Channels and WebSockets Were Used
+-----------------------------------------
+Real-time collaboration requires persistent two-way communication. WebSockets are better than traditional HTTP polling because they provide:
+- Instant message delivery.
+- Low latency updates.
+- Efficient push-based communication.
+- Better user experience in chats and task updates.
+
+16. Why Supabase Storage Was Used
+---------------------------------
+Supabase was chosen to provide cloud-based storage and media management. It is useful because:
+- Files can be stored externally instead of local disk only.
+- It supports signed URLs and secure access.
+- It helps the system handle uploads for chat, voice notes, and task attachments.
+
+17. Why This Project Is Strong Academically
+-------------------------------------------
+KollabHub is strong because it combines:
+- Full-stack web development.
+- Database design.
+- Real-time systems.
+- Authentication and authorization.
+- File storage and media handling.
+- AI integration.
+- Project management concepts.
+- Software engineering practices.
+
+It is not just a simple chat app; it is a complete collaboration platform with academic value in software engineering and intelligent systems.
+
+18. Likely Viva Questions and Expected Answer Points
+----------------------------------------------------
+Question: What is KollabHub?
+Answer: It is a collaborative workspace platform combining communication, task management, and AI assistance.
+
+Question: What is the architecture of your project?
+Answer: It is a Django-based web application using MVT architecture, Channels for WebSockets, Redis for message brokering, SQLite/PostgreSQL for database, and Supabase Storage for files.
+
+Question: What are the main modules of this project?
+Answer: Communication, Task Board, and AI Assistant.
+
+Question: How does communication work in the project?
+Answer: Users send messages through WebSockets, messages are saved in the database, and updates are broadcast to workspace members in real time.
+
+Question: How are direct messages different from group chats?
+Answer: Group chats are workspace-wide and stored in Message model, while DMs are private conversations between two users and stored in DirectMessage model.
+
+Question: What is the role of WebSockets in your project?
+Answer: They offer real-time communication for chat, notifications, and call signaling without refreshing the page.
+
+Question: What is the role of the database in your project?
+Answer: It stores users, workspaces, memberships, messages, tasks, attachments, AI history, notifications, and invite data.
+
+Question: How is authentication handled?
+Answer: Django authentication is used with a custom user model and password validation.
+
+Question: What is the difference between admin and member roles?
+Answer: Admins manage workspace settings, permissions, members, and security, while members mainly collaborate within the workspace.
+
+Question: How does the task board work?
+Answer: It uses lists and tasks, supports CRUD operations, attachments, comments, priorities, assignees, and permission settings.
+
+Question: How does the AI assistant work?
+Answer: It uses a hybrid logic of rule-based matching, ML intent classification, and Groq API support for more complex questions.
+
+Question: Why did you use Supabase Storage?
+Answer: To store files and media externally and provide secure signed URLs for uploaded files.
+
+Question: What is the significance of notifications?
+Answer: Notifications keep users informed about new messages, tasks, DMs, and workspace events.
+
+Question: What are the major challenges you faced?
+Answer: Real-time synchronization, file handling, role-specific permissions, API integration, and making the system responsive and secure.
+
+Question: How would you improve this project further?
+Answer: I would add better UI/UX, real-time presence indicators, email notifications, advanced AI context memory, better analytics, and deployment to cloud infrastructure.
+
+19. Short Viva Conclusion
+------------------------
+KollabHub is a complete collaboration platform built using Django and modern web technologies. It demonstrates practical understanding of web development, databases, authentication, real-time communication, task management, AI integration, and software engineering principles. The project is valuable because it solves a real-world problem by integrating multiple collaboration features into one system.
+
+20. Final Interview Summary
+---------------------------
+If asked in viva, the best way to present the project is:
+- Say that KollabHub is an integrated collaboration platform for teams.
+- Explain that it has three major modules: communication, task board, and AI assistant.
+- Mention that the backend is built with Django, the frontend uses HTML/CSS/JS, and real-time communication is handled by Channels and WebSockets.
+- Emphasize that the system supports authentication, role-based access, file sharing, voice notes, video/voice calls, task management, and AI assistance.
+- Mention that the database is relational and stores all core entities and their relationships.
+- Highlight that the project demonstrates both technical implementation and theoretical understanding of distributed collaboration and intelligent systems.

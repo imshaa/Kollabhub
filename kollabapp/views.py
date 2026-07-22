@@ -442,7 +442,6 @@ def workspace_join_request_decision(request, request_id):
         "message": "Join request approved." if action == "approve" else "Join request rejected.",
     })
 
-
 # ------------------------------ Workspace-page logic---------------------------
 
 @login_required
@@ -664,9 +663,6 @@ def join_workspace_manual(request):
         return redirect("chatui", workspace_id=workspace.id)
 
     return redirect("profile")
-
-
-
 
 # ----------------------------Chatpage Logic--------------------------------------
 

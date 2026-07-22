@@ -472,6 +472,18 @@ html, body {
   font-weight: 700; font-size: .8rem;
   color: #fff;
   align-self: flex-end;
+  overflow: hidden;
+}
+
+.msg-av.has-image {
+  background: transparent;
+}
+
+.msg-av-img {
+  width: 100%; height: 100%;
+  object-fit: cover;
+  display: block;
+  border-radius: 50%;
 }
 
 .msg-body { max-width: 60%; }
